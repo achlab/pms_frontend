@@ -1,0 +1,22 @@
+[
+  {
+    "role": "super_admin",
+    "email": "admin@propertysystem.com",
+    "password": "SuperAdmin123"
+  },
+  {
+    "role": "landlord",
+    "email": "landlord@propertysystem.com",
+    "password": "Landlord123"
+  },
+  {
+    "role": "caretaker",
+    "email": "caretaker@propertysystem.com",
+    "password": "Caretaker123"
+  },
+  {
+    "role": "tenant",
+    "email": "tenant@propertysystem.com",
+    "password": "Tenant123"
+  }
+]
