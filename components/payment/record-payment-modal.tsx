@@ -64,7 +64,17 @@ export function RecordPaymentModal({
       return;
     }
 
-    if (!paymentReference.trim()) {
+    // Validate payment date is not in the future
+    const paymentDateObj = new Date(paymentDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today
+    
+    if (paymentDateObj > today) {
+      toast.error("Payment date cannot be in the future");
+      return;
+    }
+
+    if (paymentMethod !== "cash" && !paymentReference.trim()) {
       toast.error("Please enter a payment reference");
       return;
     }
@@ -106,9 +116,22 @@ export function RecordPaymentModal({
         <DialogHeader>
           <DialogTitle>Record Payment</DialogTitle>
           <DialogDescription>
-            Record a payment for invoice {invoiceNumber}
+            Record a payment that was received outside the system for invoice {invoiceNumber}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Information Banner */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+          <div className="flex items-start gap-2">
+            <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
+              <span className="text-blue-600 text-xs font-bold">i</span>
+            </div>
+            <div className="text-sm text-blue-800">
+              <p className="font-medium mb-1">Manual Payment Recording</p>
+              <p>Use this form to record payments you've already received through cash, mobile money, or bank transfer. This helps keep accurate records and updates the invoice status.</p>
+            </div>
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit}>
           <div className="space-y-4 py-4">
@@ -123,17 +146,37 @@ export function RecordPaymentModal({
             {/* Amount */}
             <div className="space-y-2">
               <Label htmlFor="amount">Payment Amount *</Label>
-              <Input
-                id="amount"
-                type="number"
-                step="0.01"
-                min="0.01"
-                max={outstandingBalance}
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                required
-              />
+              <div className="space-y-2">
+                <Input
+                  id="amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={outstandingBalance}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0.00"
+                  required
+                />
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAmount((outstandingBalance / 2).toFixed(2))}
+                  >
+                    Half ({formatCurrency(outstandingBalance / 2)})
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAmount(outstandingBalance.toString())}
+                  >
+                    Full Amount
+                  </Button>
+                </div>
+              </div>
             </div>
 
             {/* Payment Method */}
@@ -147,26 +190,38 @@ export function RecordPaymentModal({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="mobile_money">Mobile Money</SelectItem>
-                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                   <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="cheque">Cheque</SelectItem>
+                  <SelectItem value="mtn_momo">MTN Mobile Money</SelectItem>
+                  <SelectItem value="vodafone_cash">Vodafone Cash</SelectItem>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Payment Reference */}
             <div className="space-y-2">
-              <Label htmlFor="reference">Payment Reference *</Label>
+              <Label htmlFor="reference">
+                Payment Reference 
+                {paymentMethod === "cash" ? " (Optional)" : " *"}
+              </Label>
               <Input
                 id="reference"
                 value={paymentReference}
                 onChange={(e) => setPaymentReference(e.target.value)}
-                placeholder="e.g., REF-MTN123456"
-                required
+                placeholder={
+                  paymentMethod === "mtn_momo" ? "e.g., MP251123.1234.A56789" :
+                  paymentMethod === "vodafone_cash" ? "e.g., VC251123123456" :
+                  paymentMethod === "bank_transfer" ? "e.g., TXN123456789" :
+                  "Receipt number or reference"
+                }
+                required={paymentMethod !== "cash"}
               />
               <p className="text-xs text-muted-foreground">
-                Transaction ID or reference number
+                {paymentMethod === "mtn_momo" ? "MTN Mobile Money transaction ID" :
+                 paymentMethod === "vodafone_cash" ? "Vodafone Cash transaction ID" :
+                 paymentMethod === "bank_transfer" ? "Bank transfer reference number" :
+                 paymentMethod === "cash" ? "Receipt number (optional for cash payments)" :
+                 "Transaction ID or reference number"}
               </p>
             </div>
 

@@ -37,7 +37,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isAuthenticated: !!user,
         })
       } catch (error) {
-        console.error("Auth initialization error:", error)
         setAuthState({
           user: null,
           isLoading: false,
@@ -50,11 +49,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const login = async (emailOrPhone: string, password: string) => {
-    console.log("Auth Context - Login attempt:", { emailOrPhone })
     setAuthState((prev) => ({ ...prev, isLoading: true }))
     try {
-      const { user } = await AuthService.login(emailOrPhone, password)
-      console.log("Auth Context - Login successful, user:", user)
+      const response = await AuthService.login(emailOrPhone, password)
+      const { user, token } = response
+      
+      // Set cookies for middleware (in addition to localStorage)
+      if (typeof document !== "undefined") {
+        document.cookie = `auth_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
+        document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(user))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
+      }
+      
       setAuthState({
         user,
         isLoading: false,
@@ -62,7 +67,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
       return { user }
     } catch (error) {
-      console.error("Auth Context - Login failed:", error)
       setAuthState((prev) => ({ ...prev, isLoading: false }))
       throw error
     }
@@ -73,11 +77,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string
     phone: string
     password: string
+    address?: string
     role: "landlord" | "tenant"
   }) => {
     setAuthState((prev) => ({ ...prev, isLoading: true }))
     try {
-      const { user } = await AuthService.register(data)
+      const response = await AuthService.register(data)
+      const { user, token } = response
+      
+      // Set cookies for middleware (in addition to localStorage)
+      if (typeof document !== "undefined") {
+        document.cookie = `auth_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
+        document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(user))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
+      }
+      
       setAuthState({
         user,
         isLoading: false,
@@ -107,15 +120,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     setAuthState((prev) => ({ ...prev, isLoading: true }))
     try {
+      // Call logout API (this will clear localStorage via authService)
       await AuthService.logout()
+    } catch (error) {
+      // Even if API call fails, we still want to clear client-side data
+      console.error("Logout API call failed, but clearing local auth:", error)
+    } finally {
+      // Always clear cookies and state, even if API fails
+      if (typeof document !== "undefined") {
+        document.cookie = "auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+        document.cookie = "auth_user=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+      }
+      
+      // Clear state
       setAuthState({
         user: null,
         isLoading: false,
         isAuthenticated: false,
       })
-    } catch (error) {
-      setAuthState((prev) => ({ ...prev, isLoading: false }))
-      throw error
+      
+      // Force redirect to login
+      if (typeof window !== "undefined") {
+        window.location.href = "/login"
+      }
     }
   }
 

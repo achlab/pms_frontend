@@ -1,88 +1,136 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+/**
+ * Middleware for role-based access control
+ * Note: Due to Edge runtime limitations, we use cookies for middleware auth check
+ * The AuthContext provider handles the actual localStorage auth
+ */
+
+type UserRole = 'super_admin' | 'landlord' | 'caretaker' | 'tenant'
+
+interface User {
+  id: string
+  role: UserRole
+  email: string
+  name: string
+}
+
+// Public routes (no authentication required)
+const PUBLIC_ROUTES = [
+  '/login',
+  '/register',
+  '/forgot-password',
+  '/reset-password',
+  '/',
+]
+
+// Role-specific protected route prefixes
+const ROLE_ROUTE_PREFIXES = {
+  super_admin: ['/admin'],
+  landlord: ['/landlord', '/properties', '/tenants', '/invoices', '/payments', '/rent-roll', '/reports'],
+  caretaker: ['/caretaker', '/maintenance-requests'],
+  tenant: ['/tenant', '/my-lease', '/my-unit', '/pay-rent', '/payments-invoices', '/meter-readings'],
+}
+
+// Shared routes accessible by all authenticated users
+const SHARED_ROUTES = [
+  '/profile',
+  '/settings',
+  '/maintenance',
+]
+
+// Default dashboard routes per role
+const DEFAULT_DASHBOARDS: Record<UserRole, string> = {
+  super_admin: '/admin/dashboard',
+  landlord: '/landlord/dashboard',
+  caretaker: '/caretaker/dashboard',
+  tenant: '/tenant/dashboard',
+}
+
 export function middleware(request: NextRequest) {
-  // Get the current path
   const path = request.nextUrl.pathname
 
-  // Get user data from cookies
+  // Check if route is public
+  const isPublicRoute = PUBLIC_ROUTES.some(route => 
+    path === route || (route === '/' && path === '/')
+  )
+
+  // Try to get user from cookie (set by AuthContext on login)
+  const authToken = request.cookies.get('auth_token')?.value
   const userCookie = request.cookies.get('auth_user')?.value
-  console.log('Middleware - Raw cookie value:', userCookie)
   
-  let user = null
+  let user: User | null = null
   if (userCookie) {
     try {
-      const decodedUserStr = decodeURIComponent(userCookie)
-      user = JSON.parse(decodedUserStr)
-      console.log('Middleware - Parsed user:', user)
+      user = JSON.parse(decodeURIComponent(userCookie))
     } catch (error) {
       console.error('Middleware - Error parsing user cookie:', error)
     }
   }
 
-  console.log('Middleware - Path:', path)
-  console.log('Middleware - User:', user)
-
-  // Public routes that don't require authentication
-  const publicRoutes = ['/login', '/register', '/forgot-password', '/reset-password', '/']
-  const isPublicRoute = publicRoutes.some(route => path.startsWith(route))
+  // ============================================
+  // 1. UNAUTHENTICATED ACCESS
+  // ============================================
   
-  // If no user is logged in and trying to access protected routes
-  if (!user && !isPublicRoute) {
-    console.log('Middleware - No user, redirecting to login')
-    return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  // If user is logged in and accessing login/register pages
-  if (user && (path === '/login' || path === '/register')) {
-    console.log('Middleware - User already logged in, redirecting to dashboard')
-    return NextResponse.redirect(new URL('/dashboard', request.url))
-  }
-
-  // If user is logged in and accessing root dashboard
-  if (user && path === '/dashboard') {
-    console.log('Middleware - Redirecting to role-specific dashboard')
-    const dashboardPath = (() => {
-      switch (user.role) {
-        case 'super_admin':
-          return '/admin/dashboard'
-        case 'landlord':
-          return '/landlord/dashboard'
-        case 'caretaker':
-          return '/caretaker/dashboard'
-        case 'tenant':
-          return '/tenant/dashboard'
-        default:
-          return '/dashboard'
-      }
-    })()
-
-    if (dashboardPath !== '/dashboard') {
-      return NextResponse.redirect(new URL(dashboardPath, request.url))
+  if (!user || !authToken) {
+    // Allow access to public routes
+    if (isPublicRoute) {
+      return NextResponse.next()
     }
+    
+    // Redirect to login with return URL
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('redirect', path)
+    return NextResponse.redirect(loginUrl)
   }
 
-  // Role-based access protection
-  if (user) {
-    const roleBasedPaths = {
-      super_admin: ['/admin'],
-      landlord: ['/landlord'],
-      caretaker: ['/caretaker'],
-      tenant: ['/tenant'],
-    }
-
-    const userRole = user.role as keyof typeof roleBasedPaths
-    const allowedPaths = roleBasedPaths[userRole] || []
-    const isAccessingOtherRolePath = Object.entries(roleBasedPaths)
-      .filter(([role]) => role !== userRole)
-      .some(([_, paths]) => paths.some(p => path.startsWith(p)))
-
-    if (isAccessingOtherRolePath) {
-      console.log('Middleware - Invalid role access, redirecting to appropriate dashboard')
-      return NextResponse.redirect(new URL(`/${userRole}/dashboard`, request.url))
-    }
+  // ============================================
+  // 2. AUTHENTICATED ACCESS TO PUBLIC ROUTES
+  // ============================================
+  
+  // Redirect logged-in users away from login/register
+  if (path === '/login' || path === '/register') {
+    return NextResponse.redirect(new URL(DEFAULT_DASHBOARDS[user.role], request.url))
   }
 
+  // Redirect from root to role-specific dashboard
+  if (path === '/' || path === '/dashboard') {
+    return NextResponse.redirect(new URL(DEFAULT_DASHBOARDS[user.role], request.url))
+  }
+
+  // ============================================
+  // 3. ROLE-BASED ACCESS CONTROL
+  // ============================================
+  
+  // Check if accessing a shared route
+  const isSharedRoute = SHARED_ROUTES.some(route => path.startsWith(route))
+  if (isSharedRoute) {
+    return NextResponse.next()
+  }
+
+  // Check if user is accessing a route for their role
+  const userRolePrefixes = ROLE_ROUTE_PREFIXES[user.role] || []
+  const hasAccessToRoute = userRolePrefixes.some(prefix => path.startsWith(prefix))
+  
+  if (hasAccessToRoute) {
+    return NextResponse.next()
+  }
+
+  // Check if trying to access another role's routes
+  const isAccessingOtherRoleRoute = Object.entries(ROLE_ROUTE_PREFIXES)
+    .filter(([role]) => role !== user.role)
+    .some(([_, prefixes]) => prefixes.some(prefix => path.startsWith(prefix)))
+
+  if (isAccessingOtherRoleRoute) {
+    // Redirect to user's default dashboard
+    return NextResponse.redirect(new URL(DEFAULT_DASHBOARDS[user.role], request.url))
+  }
+
+  // ============================================
+  // 4. ALLOW ACCESS (Shared routes or valid paths)
+  // ============================================
+  
   return NextResponse.next()
 }
 

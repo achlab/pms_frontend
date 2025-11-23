@@ -6,14 +6,25 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { CreateRequestForm } from "@/components/maintenance/create-request-form";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Info } from "lucide-react";
+import { ArrowLeft, Info, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useAuth } from "@/contexts/auth-context";
+import { MainLayout } from "@/components/main-layout";
 
 export default function CreateMaintenanceRequestPage() {
   const router = useRouter();
+  const { user, isLoading } = useAuth();
+
+  // Redirect non-tenants away from this page
+  useEffect(() => {
+    if (!isLoading && user && user.role !== "tenant") {
+      router.push("/maintenance");
+    }
+  }, [user, isLoading, router]);
 
   const handleSuccess = (requestId: string) => {
     // Redirect to maintenance page after successful creation
@@ -24,8 +35,40 @@ export default function CreateMaintenanceRequestPage() {
     router.back();
   };
 
+  // Show loading state while checking auth
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="container mx-auto py-6">
+          <div className="flex items-center justify-center min-h-[400px]">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // Show access denied for non-tenants
+  if (!user || user.role !== "tenant") {
+    return (
+      <MainLayout>
+        <div className="container mx-auto py-6">
+          <Alert variant="destructive" className="max-w-md mx-auto">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Access Denied</strong>
+              <br />
+              Only tenants can create maintenance requests. Landlords and caretakers can view and manage existing requests.
+            </AlertDescription>
+          </Alert>
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <MainLayout>
+      <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={handleCancel}>
@@ -159,7 +202,8 @@ export default function CreateMaintenanceRequestPage() {
           </Card>
         </div>
       </div>
-    </div>
+      </div>
+    </MainLayout>
   );
 }
 

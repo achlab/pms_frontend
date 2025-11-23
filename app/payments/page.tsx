@@ -62,6 +62,7 @@ export default function PaymentHistoryPage() {
 
   const payments = data?.data || [];
   const summary = data?.summary;
+  const meta = data?.meta;
 
   return (
     <MainLayout>
@@ -182,7 +183,7 @@ export default function PaymentHistoryPage() {
 
           {/* Pagination Info */}
           <div className="text-sm text-muted-foreground text-center">
-            Showing {payments.length} of {data?.meta.total || 0} payments
+            Showing {payments.length} of {meta?.total || 0} payments
           </div>
         </div>
       </div>

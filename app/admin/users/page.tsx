@@ -52,7 +52,7 @@ import { formatGhanaPhone } from "@/lib/localization"
 
 export default function AdminUsersPage() {
   const dispatch = useAppDispatch()
-  const { users } = useAppSelector((state) => state.users)
+  const users = [] // TODO: Implement with super admin user service
 
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")

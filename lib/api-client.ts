@@ -128,16 +128,26 @@ class ApiClient {
   }
 
   private setupInterceptors(): void {
-    // Request Interceptor - Add auth token
+    // Request Interceptor - Add auth token and log requests
     this.instance.interceptors.request.use(
       (config: InternalAxiosRequestConfig) => {
         const token = tokenManager.getToken();
         if (token && config.headers) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+        
+        // Enhanced request logging
+        console.group(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`);
+        console.log('Full URL:', `${config.baseURL}${config.url}`);
+        console.log('Headers:', config.headers);
+        console.log('Data:', config.data);
+        console.log('Auth Token:', token ? `${token.substring(0, 20)}...` : 'None');
+        console.groupEnd();
+        
         return config;
       },
       (error: AxiosError) => {
+        console.error('❌ Request Interceptor Error:', error);
         return Promise.reject(error);
       }
     );
@@ -145,19 +155,49 @@ class ApiClient {
     // Response Interceptor - Handle errors
     this.instance.interceptors.response.use(
       (response: AxiosResponse) => {
+        // Enhanced response logging
+        console.group(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`);
+        console.log('Status:', response.status, response.statusText);
+        console.log('Data:', response.data);
+        console.groupEnd();
         return response;
       },
       async (error: AxiosError<ApiError>) => {
+        // Enhanced error logging
+        console.group(`❌ API Error: ${error.config?.method?.toUpperCase()} ${error.config?.url}`);
+        console.error('Error Object:', error);
+        console.error('Error Message:', error.message);
+        console.error('Error Code:', error.code);
+        
         // Network error
         if (!error.response) {
+          console.error('Network Error Details:');
+          console.error('- No response from server');
+          console.error('- Possible causes: Server down, CORS issue, network disconnected');
+          console.error('- Request URL:', `${error.config?.baseURL}${error.config?.url}`);
+          console.groupEnd();
+          
           throw new ApiClientError(
-            "Network error. Please check your internet connection.",
+            "Network error. Please check your internet connection and ensure the backend server is running.",
             undefined,
             undefined
           );
         }
 
-        const { status, data } = error.response;
+        const { status, data, config: reqConfig } = error.response;
+        console.error('Response Status:', status);
+        console.error('Response Data:', data);
+        console.error('Request URL:', `${reqConfig.baseURL}${reqConfig.url}`);
+        console.error('Request Method:', reqConfig.method);
+        console.error('Request Data:', reqConfig.data);
+
+        // Normalize error response keys (handle uppercase)
+        const errorMessage = (data as any)?.Message || (data as any)?.message;
+        const errorErrors = (data as any)?.Errors || (data as any)?.errors;
+        
+        console.error('Normalized Error Message:', errorMessage);
+        console.error('Normalized Error Errors:', errorErrors);
+        console.groupEnd();
 
         // Handle 401 - Unauthorized (token expired or invalid)
         if (status === 401) {
@@ -169,7 +209,7 @@ class ApiClient {
           }
 
           throw new ApiClientError(
-            data?.message || "Your session has expired. Please login again.",
+            errorMessage || "Your session has expired. Please login again.",
             status
           );
         }
@@ -177,7 +217,7 @@ class ApiClient {
         // Handle 403 - Forbidden
         if (status === 403) {
           throw new ApiClientError(
-            data?.message || "You don't have permission to perform this action.",
+            errorMessage || "You don't have permission to perform this action.",
             status
           );
         }
@@ -185,16 +225,31 @@ class ApiClient {
         // Handle 422 - Validation Error
         if (status === 422) {
           throw new ApiClientError(
-            data?.message || "Validation failed",
+            errorMessage || "Validation failed",
             status,
-            data?.errors
+            errorErrors
+          );
+        }
+
+        // Handle 429 - Too Many Requests (Rate Limit)
+        if (status === 429) {
+          throw new ApiClientError(
+            "Too many requests. Please wait a moment and try again.",
+            status
           );
         }
 
         // Handle 404 - Not Found
         if (status === 404) {
+          const detailedMessage = errorMessage || 
+            `Endpoint not found: ${reqConfig.method?.toUpperCase()} ${reqConfig.baseURL}${reqConfig.url}\n` +
+            `Please verify:\n` +
+            `1. Backend server is running\n` +
+            `2. API base URL is correct (check .env.local)\n` +
+            `3. Endpoint exists in backend routes`;
+          
           throw new ApiClientError(
-            data?.message || "The requested resource was not found.",
+            detailedMessage,
             status
           );
         }
@@ -202,16 +257,16 @@ class ApiClient {
         // Handle 500 - Server Error
         if (status >= 500) {
           throw new ApiClientError(
-            data?.message || "Server error. Please try again later.",
+            errorMessage || "Server error. Please try again later.",
             status
           );
         }
 
         // Generic error
         throw new ApiClientError(
-          data?.message || "An unexpected error occurred.",
+          errorMessage || "An unexpected error occurred.",
           status,
-          data?.errors
+          errorErrors
         );
       }
     );
@@ -222,32 +277,83 @@ class ApiClient {
   }
 
   // ============================================
+  // RESPONSE NORMALIZATION
+  // ============================================
+
+  /**
+   * Normalize API response keys from uppercase to lowercase
+   * Backend returns: { Success, Data, Message, Errors }
+   * OR: { success, user, token, message } (for user creation)
+   * Frontend expects: { success, data, message, errors }
+   */
+  private normalizeResponse<T>(responseData: any): T {
+    if (!responseData || typeof responseData !== 'object') {
+      return responseData;
+    }
+
+    // Log for debugging
+    console.log('API Response (raw):', responseData);
+
+    // Check if response has uppercase keys and convert to lowercase
+    if ('Success' in responseData || 'Data' in responseData) {
+      const normalized = {
+        success: responseData.Success ?? responseData.success,
+        data: responseData.Data ?? responseData.data,
+        message: responseData.Message ?? responseData.message,
+        errors: responseData.Errors ?? responseData.errors,
+      } as T;
+      
+      console.log('API Response (normalized from uppercase):', normalized);
+      return normalized;
+    }
+
+    // Handle user creation response format: { success, user, token, message }
+    // Convert to: { success, data: { user, token }, message }
+    if (responseData.success && responseData.user && responseData.token) {
+      const normalized = {
+        success: responseData.success,
+        data: {
+          user: responseData.user,
+          token: responseData.token,
+        },
+        message: responseData.message,
+      } as T;
+      
+      console.log('API Response (normalized user creation):', normalized);
+      return normalized;
+    }
+
+    console.log('API Response (no normalization needed):', responseData);
+    return responseData as T;
+  }
+
+  // ============================================
   // HTTP METHODS
   // ============================================
 
   async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.get<T>(url, config);
-    return response.data;
+    const response = await this.instance.get(url, config);
+    return this.normalizeResponse<T>(response.data);
   }
 
   async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.post<T>(url, data, config);
-    return response.data;
+    const response = await this.instance.post(url, data, config);
+    return this.normalizeResponse<T>(response.data);
   }
 
   async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.put<T>(url, data, config);
-    return response.data;
+    const response = await this.instance.put(url, data, config);
+    return this.normalizeResponse<T>(response.data);
   }
 
   async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.patch<T>(url, data, config);
-    return response.data;
+    const response = await this.instance.patch(url, data, config);
+    return this.normalizeResponse<T>(response.data);
   }
 
   async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.delete<T>(url, config);
-    return response.data;
+    const response = await this.instance.delete(url, config);
+    return this.normalizeResponse<T>(response.data);
   }
 
   // ============================================
@@ -255,25 +361,25 @@ class ApiClient {
   // ============================================
 
   async postFormData<T>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.post<T>(url, formData, {
+    const response = await this.instance.post(url, formData, {
       ...config,
       headers: {
         ...config?.headers,
         "Content-Type": "multipart/form-data",
       },
     });
-    return response.data;
+    return this.normalizeResponse<T>(response.data);
   }
 
   async putFormData<T>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.put<T>(url, formData, {
+    const response = await this.instance.put(url, formData, {
       ...config,
       headers: {
         ...config?.headers,
         "Content-Type": "multipart/form-data",
       },
     });
-    return response.data;
+    return this.normalizeResponse<T>(response.data);
   }
 }
 

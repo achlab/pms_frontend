@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Wrench, AlertCircle, Clock, CheckCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/auth-context";
 import type { MaintenanceRequestsOverview } from "@/lib/api-types";
 
 interface MaintenanceOverviewCardProps {
@@ -18,6 +19,7 @@ interface MaintenanceOverviewCardProps {
 
 export function MaintenanceOverviewCard({ maintenance }: MaintenanceOverviewCardProps) {
   const router = useRouter();
+  const { user } = useAuth();
 
   const stats = [
     {
@@ -100,7 +102,7 @@ export function MaintenanceOverviewCard({ maintenance }: MaintenanceOverviewCard
         )}
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className={`grid gap-2 ${user?.role === "tenant" ? "grid-cols-2" : "grid-cols-1"}`}>
           <Button
             variant="outline"
             size="sm"
@@ -108,12 +110,14 @@ export function MaintenanceOverviewCard({ maintenance }: MaintenanceOverviewCard
           >
             View All
           </Button>
-          <Button
-            size="sm"
-            onClick={() => router.push("/maintenance-requests?action=create")}
-          >
-            New Request
-          </Button>
+          {user?.role === "tenant" && (
+            <Button
+              size="sm"
+              onClick={() => router.push("/maintenance-requests?action=create")}
+            >
+              New Request
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>

@@ -4,7 +4,9 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
+import { useRoleAccess } from "@/lib/hooks/use-role-access"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { toast } from "@/hooks/use-toast"
 import {
   LayoutDashboard,
@@ -40,71 +42,74 @@ const getNavigationForRole = (role: string) => {
 
   if (role === "super_admin") {
     return [
-      ...baseNavigation,
+      {
+        name: "Dashboard",
+        href: "/admin/dashboard",
+        icon: LayoutDashboard,
+      },
       {
         name: "User Management",
         href: "/admin/users",
         icon: Users,
       },
       {
-        name: "Property Oversight",
+        name: "Properties",
         href: "/admin/properties",
         icon: Building2,
       },
       {
-        name: "Verification Queue",
-        href: "/admin/verification",
-        icon: Shield,
-      },
-      {
-        name: "Reports & Analytics",
-        href: "/admin/reports",
-        icon: FileText,
-      },
-      {
-        name: "Dispute Resolution",
+        name: "Disputes",
         href: "/admin/disputes",
         icon: Scale,
       },
       {
-        name: "System Activity",
+        name: "Activity Log",
         href: "/admin/activity",
         icon: Activity,
       },
       {
-        name: "System Settings",
+        name: "Settings",
         href: "/admin/settings",
         icon: Settings,
+      },
+      {
+        name: "Profile",
+        href: "/profile",
+        icon: User,
       },
     ]
   }
 
   if (role === "caretaker") {
     return [
-      ...baseNavigation,
       {
-        name: "Properties & Units",
-        href: "/properties",
-        icon: Building2,
+        name: "Dashboard",
+        href: "/caretaker/dashboard",
+        icon: LayoutDashboard,
       },
       {
-        name: "Tenant Directory",
-        href: "/tenants",
-        icon: Phone,
+        name: "Invoices",
+        href: "/invoices",
+        icon: FileText,
       },
       {
-        name: "Maintenance Requests",
+        name: "Maintenance",
         href: "/maintenance",
         icon: Wrench,
       },
       {
-        name: "Meter Readings",
-        href: "/meter-readings",
-        icon: Zap,
+        name: "My Unit",
+        href: "/my-unit",
+        icon: Home,
       },
       {
-        name: "Profile & Settings",
+        name: "Profile",
         href: "/profile",
+        icon: User,
+      },
+      {
+        name: "Settings",
+        href: "/settings",
         icon: Settings,
       },
     ]
@@ -112,16 +117,20 @@ const getNavigationForRole = (role: string) => {
 
   if (role === "tenant") {
     return [
-      ...baseNavigation,
+      {
+        name: "Dashboard",
+        href: "/tenant/dashboard",
+        icon: LayoutDashboard,
+      },
       {
         name: "My Lease",
         href: "/my-lease",
         icon: Home,
       },
       {
-        name: "Payments & Invoices",
-        href: "/payments-invoices",
-        icon: Receipt,
+        name: "My Unit",
+        href: "/my-unit",
+        icon: Building2,
       },
       {
         name: "Pay Rent",
@@ -129,30 +138,54 @@ const getNavigationForRole = (role: string) => {
         icon: CreditCard,
       },
       {
-        name: "Maintenance Requests",
+        name: "Invoices",
+        href: "/invoices",
+        icon: Receipt,
+      },
+      {
+        name: "Maintenance",
+        href: "/maintenance/create",
+        icon: Wrench,
+      },
+      {
+        name: "My Requests",
         href: "/maintenance-requests",
         icon: Tool,
       },
       {
-        name: "Profile & Settings",
+        name: "Meter Readings",
+        href: "/meter-readings",
+        icon: Zap,
+      },
+      {
+        name: "Profile",
         href: "/profile",
         icon: User,
+      },
+      {
+        name: "Settings",
+        href: "/settings",
+        icon: Settings,
       },
     ]
   }
 
   // Landlord navigation
   return [
-    ...baseNavigation,
+    {
+      name: "Dashboard",
+      href: "/landlord/dashboard",
+      icon: LayoutDashboard,
+    },
     {
       name: "Properties",
       href: "/properties",
       icon: Building2,
     },
     {
-      name: "Finance",
-      href: "/finance",
-      icon: DollarSign,
+      name: "Tenants",
+      href: "/tenants",
+      icon: UserCheck,
     },
     {
       name: "Invoices",
@@ -170,11 +203,6 @@ const getNavigationForRole = (role: string) => {
       icon: Users,
     },
     {
-      name: "Tenants",
-      href: "/tenants",
-      icon: UserCheck,
-    },
-    {
       name: "Maintenance",
       href: "/maintenance",
       icon: Wrench,
@@ -185,8 +213,13 @@ const getNavigationForRole = (role: string) => {
       icon: BarChart3,
     },
     {
-      name: "Profile & Settings",
+      name: "Profile",
       href: "/profile",
+      icon: User,
+    },
+    {
+      name: "Settings",
+      href: "/settings",
       icon: Settings,
     },
   ]
@@ -195,6 +228,7 @@ const getNavigationForRole = (role: string) => {
 export function Sidebar() {
   const pathname = usePathname()
   const { user, logout, isLoading } = useAuth()
+  const { roleName, canAccessRoute } = useRoleAccess()
   const router = useRouter()
 
   const currentUserRole = user?.role || "landlord"
@@ -203,17 +237,14 @@ export function Sidebar() {
   const handleLogout = async () => {
     try {
       await logout()
+      // Auth context will handle redirect to /login
       toast({
         title: "Logged out successfully",
         description: "You have been signed out of PropertyHub",
       })
-      router.push("/login")
     } catch (error) {
-      toast({
-        title: "Logout failed",
-        description: "There was an error signing you out",
-        variant: "destructive",
-      })
+      // Even if logout fails, user will be redirected
+      console.error("Logout error:", error)
     }
   }
 
@@ -235,17 +266,30 @@ export function Sidebar() {
         </div>
       </div>
 
+      {/* Role Badge */}
+      <div className="px-6 py-4">
+        <Badge variant="secondary" className="w-full justify-center bg-white/20 text-white hover:bg-white/30">
+          {roleName || "User"}
+        </Badge>
+      </div>
+
       {/* Navigation */}
       <nav className="flex-1 px-4 py-6 space-y-2">
         {navigation.map((item) => {
-          const isActive = pathname === item.href
+          const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+          // Only show links user can access
+          if (!canAccessRoute(item.href)) {
+            return null
+          }
           return (
             <Link
               key={item.name}
               href={item.href}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 min-h-[44px]",
-                isActive ? "bg-indigo-100 text-indigo-700 shadow-lg" : "text-white/90 hover:bg-white/10 hover:text-white",
+                isActive 
+                  ? "bg-white text-indigo-700 shadow-lg" 
+                  : "text-white/90 hover:bg-white/10 hover:text-white",
               )}
             >
               <item.icon className="h-5 w-5" />

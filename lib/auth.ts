@@ -59,11 +59,17 @@ export class AuthService {
     email: string;
     phone: string;
     password: string;
+    address?: string;
     role: "landlord" | "tenant";
   }): Promise<{ user: User; token: string }> {
     const response = await authService.register({
-      ...data,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      password: data.password,
       password_confirmation: data.password,
+      address: data.address,
+      role: data.role,
     });
     const user = convertApiUserToLegacyUser(response.user);
     return { user, token: response.token };

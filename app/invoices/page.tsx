@@ -1,19 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/main-layout";
+import { InvoiceDashboard } from "@/components/invoice/invoice-dashboard";
 import { useInvoices } from "@/lib/hooks/use-invoice";
 import { InvoiceList } from "@/components/invoice/invoice-list";
 import { RecordPaymentModal } from "@/components/payment/record-payment-modal";
+import { SelectInvoiceModal } from "@/components/payment/select-invoice-modal";
 import { InvoiceListSkeleton, PageHeaderSkeleton } from "@/components/ui/loading-skeleton";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, FileText, RefreshCw } from "lucide-react";
+import { AlertCircle, FileText, RefreshCw, CreditCard } from "lucide-react";
 import { getErrorMessage } from "@/lib/api-utils";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/auth-context";
 import type { InvoiceStatus, InvoiceType } from "@/lib/api-types";
 
 export default function InvoicesPage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | undefined>();
   const [typeFilter, setTypeFilter] = useState<InvoiceType | undefined>();
@@ -23,6 +27,10 @@ export default function InvoicesPage() {
   const [selectedInvoiceNumber, setSelectedInvoiceNumber] = useState<string>("");
   const [selectedInvoiceBalance, setSelectedInvoiceBalance] = useState<number>(0);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isSelectInvoiceModalOpen, setIsSelectInvoiceModalOpen] = useState(false);
+
+  // Determine if we should show the new dashboard or legacy view
+  const showNewDashboard = user?.role && ["landlord", "caretaker"].includes(user.role);
 
   const { data, isLoading, error, refetch, isFetching } = useInvoices({
     status: statusFilter,
@@ -39,6 +47,13 @@ export default function InvoicesPage() {
       setSelectedInvoiceBalance(invoice.outstanding_balance);
       setIsPaymentModalOpen(true);
     }
+  };
+
+  const handleSelectInvoiceForPayment = (invoice: any) => {
+    setSelectedInvoiceId(invoice.id);
+    setSelectedInvoiceNumber(invoice.invoice_number);
+    setSelectedInvoiceBalance(invoice.outstanding_balance);
+    setIsPaymentModalOpen(true);
   };
 
   const handleFilterChange = (filters: {
@@ -85,9 +100,21 @@ export default function InvoicesPage() {
     );
   }
 
+  // Show new dashboard for landlords and caretakers
+  if (showNewDashboard && user?.role) {
+    return (
+      <MainLayout>
+        <div className="container mx-auto px-4 py-8">
+          <InvoiceDashboard userRole={user.role as "landlord" | "caretaker"} />
+        </div>
+      </MainLayout>
+    );
+  }
+
   const invoices = data?.data || [];
   const summary = data?.summary;
 
+  // Legacy view for tenants and fallback
   return (
     <MainLayout>
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/50 dark:from-slate-900 dark:via-blue-900/20 dark:to-indigo-900/30">
@@ -102,10 +129,18 @@ export default function InvoicesPage() {
                 View and manage your invoices and payments
               </p>
             </div>
-            <Button onClick={() => refetch()} disabled={isFetching} variant="outline">
-              <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              {user?.role === "landlord" && (
+                <Button onClick={() => setIsSelectInvoiceModalOpen(true)}>
+                  <CreditCard className="h-4 w-4 mr-2" />
+                  Record Payment
+                </Button>
+              )}
+              <Button onClick={() => refetch()} disabled={isFetching} variant="outline">
+                <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
           </div>
 
           {/* Summary Cards */}
@@ -142,6 +177,13 @@ export default function InvoicesPage() {
             onViewDetails={(id) => router.push(`/invoices/${id}`)}
             onRecordPayment={handleRecordPayment}
             onFilterChange={handleFilterChange}
+          />
+
+          {/* Select Invoice Modal */}
+          <SelectInvoiceModal
+            isOpen={isSelectInvoiceModalOpen}
+            onClose={() => setIsSelectInvoiceModalOpen(false)}
+            onSelectInvoice={handleSelectInvoiceForPayment}
           />
 
           {/* Record Payment Modal */}

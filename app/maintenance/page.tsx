@@ -7,6 +7,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { MainLayout } from "@/components/main-layout";
+import { useAuth } from "@/contexts/auth-context";
 import { MaintenanceRequestList } from "@/components/maintenance/maintenance-request-list";
 import { MaintenanceRequestDetails } from "@/components/maintenance/maintenance-request-details";
 import { AddNoteModal } from "@/components/maintenance/add-note-modal";
@@ -33,6 +35,7 @@ import type { MaintenanceStatus, MaintenancePriority } from "@/lib/api-types";
 
 export default function MaintenancePage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [filters, setFilters] = useState<{
     status?: MaintenanceStatus;
     priority?: MaintenancePriority;
@@ -78,19 +81,25 @@ export default function MaintenancePage() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <MainLayout>
+      <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Maintenance Requests</h1>
           <p className="text-muted-foreground mt-1">
-            View and manage your maintenance requests
+            {user?.role === "tenant" 
+              ? "Submit new maintenance requests and track existing ones"
+              : "View and manage maintenance requests"
+            }
           </p>
         </div>
-        <Button onClick={handleCreateNew}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Request
-        </Button>
+        {user?.role === "tenant" && (
+          <Button onClick={handleCreateNew}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Request
+          </Button>
+        )}
       </div>
 
       {/* Statistics Cards */}
@@ -249,6 +258,7 @@ export default function MaintenancePage() {
           onSuccess={handleNoteSuccess}
         />
       )}
-    </div>
+      </div>
+    </MainLayout>
   );
 }

@@ -39,8 +39,8 @@ const mockLeases = [
 ]
 
 export default function RentRollPage() {
-  const { properties } = useAppSelector((state) => state.properties)
-  const { users } = useAppSelector((state) => state.users)
+  const { properties } = useAppSelector((state) => state.properties || { properties: [] })
+  const users = [] // TODO: Implement with tenant service
 
   const [searchTerm, setSearchTerm] = useState("")
   const [propertyFilter, setPropertyFilter] = useState("all")

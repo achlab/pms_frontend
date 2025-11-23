@@ -38,8 +38,8 @@ class AuthenticationService {
       password,
     });
 
-    // Store token and user data
-    if (response.success && response.token) {
+    // Store token and user data (API returns token and user directly)
+    if (response.token) {
       tokenManager.setToken(response.token);
       tokenManager.setUserData(response.user);
     }
@@ -48,13 +48,14 @@ class AuthenticationService {
   }
 
   /**
-   * Register new user
+   * Register new user (Landlord only for public registration)
+   * Tenants and Caretakers are created by Landlords/Super Admins
    */
   async register(data: RegisterRequest): Promise<LoginResponse> {
     const response = await apiClient.post<LoginResponse>("/register", data);
 
-    // Store token and user data
-    if (response.success && response.token) {
+    // Store token and user data (API returns token and user directly)
+    if (response.token) {
       tokenManager.setToken(response.token);
       tokenManager.setUserData(response.user);
     }
@@ -103,6 +104,28 @@ class AuthenticationService {
     return apiClient.post<ApiResponse<{ valid: boolean }>>("/profile/password/verify", {
       password,
     });
+  }
+
+  /**
+   * Refresh authentication by verifying token and fetching user
+   */
+  async refreshAuth(): Promise<User | null> {
+    try {
+      const token = this.getToken();
+      if (!token) return null;
+
+      const response = await apiClient.get<ApiResponse<User>>("/profile");
+      
+      if (response.success && response.data) {
+        tokenManager.setUserData(response.data);
+        return response.data;
+      }
+
+      return null;
+    } catch (error) {
+      tokenManager.clearAll();
+      return null;
+    }
   }
 
   /**

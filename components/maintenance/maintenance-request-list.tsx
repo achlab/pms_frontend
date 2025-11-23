@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Search, Filter, Plus } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
 import type { MaintenanceRequest, MaintenanceStatus, MaintenancePriority } from "@/lib/api-types";
 
 interface MaintenanceRequestListProps {
@@ -32,6 +33,7 @@ export function MaintenanceRequestList({
   onCreateNew,
   onFilterChange,
 }: MaintenanceRequestListProps) {
+  const { user } = useAuth();
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -89,7 +91,7 @@ export function MaintenanceRequestList({
             <Filter className="h-5 w-5 text-muted-foreground" />
             <h3 className="font-semibold">Filters</h3>
           </div>
-          {onCreateNew && (
+          {onCreateNew && user?.role === "tenant" && (
             <Button onClick={onCreateNew}>
               <Plus className="h-4 w-4 mr-2" />
               New Request
@@ -150,8 +152,13 @@ export function MaintenanceRequestList({
       {/* Request List */}
       {filteredRequests.length === 0 ? (
         <div className="text-center py-12 bg-white dark:bg-slate-800 rounded-lg border">
-          <p className="text-muted-foreground">No maintenance requests found</p>
-          {onCreateNew && (
+          <p className="text-muted-foreground">
+            {user?.role === "tenant" 
+              ? "No maintenance requests found" 
+              : "No maintenance requests to display"
+            }
+          </p>
+          {onCreateNew && user?.role === "tenant" && (
             <Button onClick={onCreateNew} className="mt-4">
               <Plus className="h-4 w-4 mr-2" />
               Create Your First Request

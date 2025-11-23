@@ -93,10 +93,22 @@ export function InvoiceCard({ invoice, onViewDetails, onRecordPayment }: Invoice
             <span className="font-medium">{formatCurrency(invoice.base_rent_amount)}</span>
           </div>
 
-          {invoice.additional_charges > 0 && (
+          {/* Additional Charges - Handle both number and array formats */}
+          {typeof invoice.additional_charges === 'number' && invoice.additional_charges > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-muted-foreground">Additional Charges</span>
               <span className="font-medium">{formatCurrency(invoice.additional_charges)}</span>
+            </div>
+          )}
+
+          {Array.isArray(invoice.additional_charges) && invoice.additional_charges.length > 0 && (
+            <div className="space-y-1">
+              {invoice.additional_charges.map((charge: any, index: number) => (
+                <div key={index} className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">{charge.name || charge.description}</span>
+                  <span className="font-medium">{formatCurrency(charge.amount)}</span>
+                </div>
+              ))}
             </div>
           )}
 

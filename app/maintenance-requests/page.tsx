@@ -4,6 +4,7 @@ import type React from "react"
 
 import { useState } from "react"
 import { MainLayout } from "@/components/main-layout"
+import { useAuth } from "@/contexts/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,6 +20,7 @@ import { Wrench, Plus, Clock, CheckCircle, Calendar, MessageSquare, Camera, Aler
 import { formatDate } from "@/lib/localization"
 
 export default function MaintenanceRequestsPage() {
+  const { user } = useAuth();
   const [showSubmitForm, setShowSubmitForm] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [formData, setFormData] = useState({
@@ -169,16 +171,20 @@ export default function MaintenanceRequestsPage() {
               Maintenance Requests
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-2">
-              Submit new maintenance requests and track the status of existing ones.
+              {user?.role === "tenant" 
+                ? "Submit new maintenance requests and track the status of existing ones."
+                : "View and track maintenance requests."
+              }
             </p>
           </div>
-          <Dialog open={showSubmitForm} onOpenChange={setShowSubmitForm}>
-            <DialogTrigger asChild>
-              <Button className="bg-indigo-600 hover:bg-indigo-700">
-                <Plus className="h-4 w-4 mr-2" />
-                Submit Request
-              </Button>
-            </DialogTrigger>
+          {user?.role === "tenant" && (
+            <Dialog open={showSubmitForm} onOpenChange={setShowSubmitForm}>
+              <DialogTrigger asChild>
+                <Button className="bg-indigo-600 hover:bg-indigo-700">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Submit Request
+                </Button>
+              </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
@@ -294,7 +300,8 @@ export default function MaintenanceRequestsPage() {
                 </div>
               </form>
             </DialogContent>
-          </Dialog>
+            </Dialog>
+          )}
         </div>
 
         {/* Emergency Contact Alert */}
