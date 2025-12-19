@@ -209,6 +209,7 @@ export default function MaintenancePage() {
           onViewDetails={handleViewDetails}
           onAddNote={handleAddNote}
           onCreateNew={handleCreateNew}
+          onRefresh={() => refetch()}
           onFilterChange={setFilters}
         />
       )}

@@ -219,7 +219,7 @@ export default function LoginPage() {
               {/* Submit Button */}
               <Button
                 type="submit"
-                className="w-full h-11 text-base font-medium"
+                className="w-full h-11 text-base font-medium bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 text-white shadow-lg hover:shadow-xl transition-all duration-200"
                 disabled={isLoading || !formData.email || !formData.password}
               >
                 {isLoading ? (
@@ -234,13 +234,19 @@ export default function LoginPage() {
             </form>
 
             {/* Registration Link */}
-            <div className="mt-6 text-center">
-              <p className="text-sm text-muted-foreground">
-                Don't have an account?{" "}
-                <Link href="/register" className="text-primary hover:underline font-medium">
+            <div className="mt-6">
+              <div className="text-center text-sm text-muted-foreground mb-3">
+                Don't have an account?
+              </div>
+              <Link href="/register" className="block">
+                <Button 
+                  type="button"
+                  variant="outline" 
+                  className="w-full h-11 text-base font-medium border-2 hover:bg-indigo-50 hover:border-indigo-300 dark:hover:bg-indigo-950"
+                >
                   Sign up as Landlord
-                </Link>
-              </p>
+                </Button>
+              </Link>
             </div>
 
             {/* Divider */}
@@ -249,28 +255,28 @@ export default function LoginPage() {
                 <div className="w-full border-t border-border" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">Account Types</span>
+                <span className="bg-white dark:bg-gray-900 px-4 text-muted-foreground font-medium">Account Types</span>
               </div>
             </div>
 
             {/* Account Type Info */}
-            <div className="space-y-2 text-xs text-muted-foreground">
+            <div className="space-y-3 text-xs text-muted-foreground bg-muted/30 rounded-lg p-4">
               <div className="flex items-start gap-2">
-                <div className="w-2 h-2 rounded-full bg-indigo-500 mt-1 flex-shrink-0" />
-                <p>
-                  <strong className="text-foreground">Landlords:</strong> Self-register to manage properties
+                <div className="w-2 h-2 rounded-full bg-indigo-500 mt-1.5 flex-shrink-0" />
+                <p className="leading-relaxed">
+                  <strong className="text-foreground font-semibold">Landlords:</strong> Self-register to manage properties
                 </p>
               </div>
               <div className="flex items-start gap-2">
-                <div className="w-2 h-2 rounded-full bg-cyan-500 mt-1 flex-shrink-0" />
-                <p>
-                  <strong className="text-foreground">Caretakers & Tenants:</strong> Accounts created by landlords
+                <div className="w-2 h-2 rounded-full bg-cyan-500 mt-1.5 flex-shrink-0" />
+                <p className="leading-relaxed">
+                  <strong className="text-foreground font-semibold">Caretakers & Tenants:</strong> Accounts created by landlords
                 </p>
               </div>
               <div className="flex items-start gap-2">
-                <div className="w-2 h-2 rounded-full bg-purple-500 mt-1 flex-shrink-0" />
-                <p>
-                  <strong className="text-foreground">Super Admins:</strong> System administrators
+                <div className="w-2 h-2 rounded-full bg-purple-500 mt-1.5 flex-shrink-0" />
+                <p className="leading-relaxed">
+                  <strong className="text-foreground font-semibold">Super Admins:</strong> System administrators
                 </p>
               </div>
             </div>

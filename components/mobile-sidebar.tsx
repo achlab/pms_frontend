@@ -4,6 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/contexts/auth-context"
 import {
   LayoutDashboard,
   Building2,
@@ -18,47 +19,127 @@ import {
   Settings,
   Activity,
   CreditCard,
+  Scale,
+  Home,
+  Receipt,
+  User,
+  BarChart3,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const getNavigationForRole = (role: string) => {
-  const baseNavigation = [
-    {
-      name: "Dashboard",
-      href: "/dashboard",
-      icon: LayoutDashboard,
-    },
-  ]
-
   if (role === "super_admin") {
     return [
-      ...baseNavigation,
+      {
+        name: "Dashboard",
+        href: "/admin/dashboard",
+        icon: LayoutDashboard,
+      },
       {
         name: "User Management",
         href: "/admin/users",
         icon: Users,
       },
       {
-        name: "Property Oversight",
+        name: "Properties",
         href: "/admin/properties",
         icon: Building2,
       },
       {
-        name: "System Activity",
+        name: "Disputes",
+        href: "/admin/disputes",
+        icon: Scale,
+      },
+      {
+        name: "Activity Log",
         href: "/admin/activity",
         icon: Activity,
       },
       {
-        name: "System Settings",
+        name: "Settings",
         href: "/admin/settings",
         icon: Settings,
+      },
+      {
+        name: "Profile",
+        href: "/profile",
+        icon: User,
+      },
+    ]
+  }
+
+  if (role === "caretaker") {
+    return [
+      {
+        name: "Dashboard",
+        href: "/caretaker/dashboard",
+        icon: LayoutDashboard,
+      },
+      {
+        name: "My Unit",
+        href: "/my-unit",
+        icon: Home,
+      },
+      {
+        name: "Maintenance",
+        href: "/maintenance-requests",
+        icon: Wrench,
+      },
+      {
+        name: "Profile",
+        href: "/profile",
+        icon: User,
+      },
+    ]
+  }
+
+  if (role === "tenant") {
+    return [
+      {
+        name: "Dashboard",
+        href: "/dashboard",
+        icon: LayoutDashboard,
+      },
+      {
+        name: "My Unit",
+        href: "/my-unit",
+        icon: Home,
+      },
+      {
+        name: "My Lease",
+        href: "/my-lease",
+        icon: FileText,
+      },
+      {
+        name: "Pay Rent",
+        href: "/pay-rent",
+        icon: DollarSign,
+      },
+      {
+        name: "Maintenance",
+        href: "/maintenance-requests",
+        icon: Wrench,
+      },
+      {
+        name: "Payments",
+        href: "/payments-invoices",
+        icon: Receipt,
+      },
+      {
+        name: "Profile",
+        href: "/profile",
+        icon: User,
       },
     ]
   }
 
   // Landlord navigation
   return [
-    ...baseNavigation,
+    {
+      name: "Dashboard",
+      href: "/dashboard",
+      icon: LayoutDashboard,
+    },
     {
       name: "Properties",
       href: "/properties",
@@ -70,19 +151,9 @@ const getNavigationForRole = (role: string) => {
       icon: DollarSign,
     },
     {
-      name: "Invoices",
-      href: "/invoices",
-      icon: FileText,
-    },
-    {
-      name: "Payments",
-      href: "/payments",
-      icon: CreditCard,
-    },
-    {
-      name: "Rent Roll",
-      href: "/rent-roll",
-      icon: Users,
+      name: "Reports",
+      href: "/reports",
+      icon: BarChart3,
     },
     {
       name: "Tenants",
@@ -94,14 +165,20 @@ const getNavigationForRole = (role: string) => {
       href: "/maintenance",
       icon: Wrench,
     },
+    {
+      name: "Profile",
+      href: "/profile",
+      icon: User,
+    },
   ]
 }
 
 export function MobileSidebar() {
   const pathname = usePathname()
   const [isOpen, setIsOpen] = useState(false)
+  const { user } = useAuth()
 
-  const currentUserRole = "super_admin" // This would be dynamic based on logged-in user
+  const currentUserRole = user?.role || "landlord"
   const navigation = getNavigationForRole(currentUserRole)
 
   return (
@@ -180,15 +257,17 @@ export function MobileSidebar() {
               {currentUserRole === "super_admin" ? (
                 <Shield className="h-4 w-4 text-white" />
               ) : (
-                <span className="text-sm font-medium text-white">JD</span>
+                <span className="text-sm font-medium text-white">
+                  {user?.name?.charAt(0)?.toUpperCase() || "U"}
+                </span>
               )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-white truncate">
-                {currentUserRole === "super_admin" ? "Admin User" : "John Doe"}
+                {user?.name || "User"}
               </p>
-              <p className="text-xs text-white/70 truncate">
-                {currentUserRole === "super_admin" ? "Super Admin" : "Landlord"}
+              <p className="text-xs text-white/70 truncate capitalize">
+                {currentUserRole?.replace("_", " ") || "User"}
               </p>
             </div>
           </div>

@@ -71,7 +71,7 @@ export default function TenantsPage() {
 
   // Helper function to get tenant's unit and property
   const getTenantUnitInfo = (tenantId: string) => {
-    const unit = units.find((u) => u.tenant_id === tenantId)
+    const unit = units.find((u) => u.tenant?.id === tenantId)
     if (!unit) return null
     const property = properties.find((p) => p.id === unit.property_id)
     return { unit, property }
@@ -79,7 +79,7 @@ export default function TenantsPage() {
 
   // Helper function to get caretaker's properties
   const getCaretakerProperties = (caretakerId: string) => {
-    return properties.filter((p) => p.caretaker_id === caretakerId)
+    return properties.filter((p) => p.caretaker?.id === caretakerId)
   }
 
   // Filtered users based on search

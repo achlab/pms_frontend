@@ -13,7 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useCreateMaintenanceRequest, useMaintenanceCategories } from "@/lib/hooks/use-maintenance";
-import { formatDateForApi, getErrorMessage } from "@/lib/api-utils";
+import { useTenantProperties, useTenantPropertyUnits } from "@/lib/hooks/use-tenant-property";
+import { formatDateForApi, getFirstValidationError } from "@/lib/api-utils";
 import { toast } from "sonner";
 import { Upload, X, AlertCircle } from "lucide-react";
 import type { MaintenancePriority } from "@/lib/api-types";
@@ -28,13 +29,40 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<MaintenancePriority>("normal");
   const [categoryId, setCategoryId] = useState("");
+  const [propertyId, setPropertyId] = useState("");
+  const [unitId, setUnitId] = useState("");
   const [preferredDate, setPreferredDate] = useState("");
   const [files, setFiles] = useState<File[]>([]);
 
-  const { data: categoriesData, isLoading: loadingCategories } = useMaintenanceCategories();
+  const { data: categoriesData, isLoading: loadingCategories, error: categoriesError } = useMaintenanceCategories();
+  const { data: propertiesData, isLoading: loadingProperties, error: propertiesError } = useTenantProperties();
+  const { data: unitsData, isLoading: loadingUnits, error: unitsError } = useTenantPropertyUnits(propertyId);
   const { mutate: createRequest, isLoading: creating } = useCreateMaintenanceRequest();
 
   const categories = categoriesData?.data || [];
+  const properties = propertiesData?.data || [];
+  const units = unitsData?.data || [];
+
+  // Debug logging
+  console.log("Form Debug:", {
+    categoriesData,
+    categories,
+    loadingCategories,
+    categoriesError,
+    categoriesLength: categories.length,
+    propertiesData,
+    properties,
+    loadingProperties,
+    propertiesError,
+    propertiesLength: properties.length,
+    unitsData,
+    units,
+    loadingUnits,
+    unitsError,
+    unitsLength: units.length,
+    selectedPropertyId: propertyId,
+    selectedUnitId: unitId
+  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -47,6 +75,7 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
     setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -56,8 +85,18 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
       return;
     }
 
+    if (title.trim().length < 10) {
+      toast.error("Title must be at least 10 characters long");
+      return;
+    }
+
     if (!description.trim()) {
       toast.error("Please enter a description");
+      return;
+    }
+
+    if (description.trim().length < 20) {
+      toast.error("Description must be at least 20 characters long");
       return;
     }
 
@@ -66,15 +105,56 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
       return;
     }
 
+    if (!propertyId) {
+      toast.error("Please select a property");
+      return;
+    }
+
+    // Check if the selected property is in the available properties list
+    const selectedProperty = properties.find(p => p.id === propertyId);
+    if (!selectedProperty) {
+      toast.error("Selected property is not available. Please refresh and try again.");
+      return;
+    }
+
+    // Validate preferred start date if provided
+    if (preferredDate && preferredDate.trim()) {
+      const selectedDate = new Date(preferredDate);
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(0, 0, 0, 0);
+      
+      if (selectedDate < tomorrow) {
+        toast.error("Preferred start date must be tomorrow or later");
+        return;
+      }
+    }
+
     try {
-      const result = await createRequest({
+      const requestData: any = {
         title: title.trim(),
         description: description.trim(),
         priority,
         category_id: categoryId,
-        preferred_start_date: preferredDate || undefined,
-        media: files.length > 0 ? files : undefined,
-      });
+        property_id: propertyId,
+      };
+
+      // Only include optional fields if they have values
+      if (unitId && unitId.trim()) {
+        requestData.property_unit_id = unitId.trim();
+      }
+
+      if (preferredDate && preferredDate.trim()) {
+        requestData.preferred_start_date = preferredDate.trim();
+      }
+
+      if (files.length > 0) {
+        requestData.media = files;
+      }
+      
+      console.log("🚀 Submitting maintenance request:", requestData);
+      
+      const result = await createRequest(requestData);
 
       toast.success("Maintenance request created successfully!");
 
@@ -83,6 +163,8 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
       setDescription("");
       setPriority("normal");
       setCategoryId("");
+      setPropertyId("");
+      setUnitId("");
       setPreferredDate("");
       setFiles([]);
 
@@ -90,7 +172,7 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
         onSuccess(result.data.id);
       }
     } catch (error) {
-      toast.error(getErrorMessage(error));
+      toast.error(getFirstValidationError(error));
     }
   };
 
@@ -103,19 +185,33 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Title */}
           <div className="space-y-2">
-            <Label htmlFor="title">Title *</Label>
+            <div className="flex justify-between items-center">
+              <Label htmlFor="title">Title *</Label>
+              <span className={`text-xs ${title.length < 10 ? 'text-red-500' : 'text-gray-500'}`}>
+                {title.length}/10 min
+              </span>
+            </div>
             <Input
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g., Leaking kitchen faucet"
               required
+              className={title.length > 0 && title.length < 10 ? 'border-red-300' : ''}
             />
+            {title.length > 0 && title.length < 10 && (
+              <p key="title-validation" className="text-xs text-red-500">Title must be at least 10 characters long</p>
+            )}
           </div>
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description">Description *</Label>
+            <div className="flex justify-between items-center">
+              <Label htmlFor="description">Description *</Label>
+              <span className={`text-xs ${description.length < 20 ? 'text-red-500' : 'text-gray-500'}`}>
+                {description.length}/20 min
+              </span>
+            </div>
             <Textarea
               id="description"
               value={description}
@@ -123,7 +219,97 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
               placeholder="Describe the issue in detail..."
               rows={4}
               required
+              className={description.length > 0 && description.length < 20 ? 'border-red-300' : ''}
             />
+            {description.length > 0 && description.length < 20 && (
+              <p key="description-validation" className="text-xs text-red-500">Description must be at least 20 characters long</p>
+            )}
+          </div>
+
+          {/* Property */}
+          <div className="space-y-2">
+            <Label htmlFor="property">Property *</Label>
+            <Select 
+              value={propertyId} 
+              onValueChange={(value) => {
+                setPropertyId(value);
+                setUnitId(""); // Reset unit when property changes
+              }} 
+              disabled={loadingProperties}
+            >
+              <SelectTrigger id="property">
+                <SelectValue placeholder={
+                  loadingProperties 
+                    ? "Loading properties..." 
+                    : propertiesError 
+                      ? "Error loading properties"
+                      : properties.length === 0
+                        ? "No properties available"
+                        : "Select property"
+                } />
+              </SelectTrigger>
+              <SelectContent>
+                {properties.length > 0 ? (
+                  properties.map((property) => (
+                    <SelectItem key={property.id} value={property.id}>
+                      {property.name} - {property.address}
+                    </SelectItem>
+                  ))
+                ) : !loadingProperties && (
+                  <SelectItem key="no-properties" value="no-properties" disabled>
+                    {propertiesError ? "Failed to load properties" : "No properties available"}
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            {propertiesError && (
+              <p key="properties-error" className="text-sm text-red-600 dark:text-red-400">
+                Error loading properties. Please refresh the page or contact support.
+              </p>
+            )}
+          </div>
+
+          {/* Unit (Optional) */}
+          <div className="space-y-2">
+            <Label htmlFor="unit">Unit (Optional)</Label>
+            <Select 
+              value={unitId} 
+              onValueChange={setUnitId} 
+              disabled={loadingUnits || !propertyId}
+            >
+              <SelectTrigger id="unit">
+                <SelectValue placeholder={
+                  !propertyId
+                    ? "Select property first"
+                    : loadingUnits 
+                      ? "Loading units..." 
+                      : unitsError 
+                        ? "Error loading units"
+                        : units.length === 0
+                          ? "No units available"
+                          : "Select unit (optional)"
+                } />
+              </SelectTrigger>
+              <SelectContent>
+                {units.length > 0 ? (
+                  units.map((unit) => (
+                    <SelectItem key={unit.id} value={unit.id}>
+                      Unit {unit.unit_number}
+                      {unit.tenant && ` (${unit.tenant.name})`}
+                    </SelectItem>
+                  ))
+                ) : !loadingUnits && propertyId && (
+                  <SelectItem key="no-units" value="no-units" disabled>
+                    {unitsError ? "Failed to load units" : "No units available"}
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+            {unitsError && (
+              <p key="units-error" className="text-sm text-red-600 dark:text-red-400">
+                Error loading units. Please refresh the page or contact support.
+              </p>
+            )}
           </div>
 
           {/* Category */}
@@ -131,19 +317,35 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
             <Label htmlFor="category">Category *</Label>
             <Select value={categoryId} onValueChange={setCategoryId} disabled={loadingCategories}>
               <SelectTrigger id="category">
-                <SelectValue placeholder={loadingCategories ? "Loading..." : "Select category"} />
+                <SelectValue placeholder={
+                  loadingCategories 
+                    ? "Loading categories..." 
+                    : categoriesError 
+                      ? "Error loading categories"
+                      : categories.length === 0
+                        ? "No categories available"
+                        : "Select category"
+                } />
               </SelectTrigger>
               <SelectContent>
-                {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
-                    <div className="flex items-center gap-2">
-                      <span>{category.icon}</span>
-                      <span>{category.name}</span>
-                    </div>
+                {categories.length > 0 ? (
+                  categories.map((category) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.icon} {category.name}
+                    </SelectItem>
+                  ))
+                ) : !loadingCategories && (
+                  <SelectItem key="no-categories" value="no-categories" disabled>
+                    {categoriesError ? "Failed to load categories" : "No categories available"}
                   </SelectItem>
-                ))}
+                )}
               </SelectContent>
             </Select>
+            {categoriesError && (
+              <p key="categories-error" className="text-sm text-red-600 dark:text-red-400">
+                Error loading categories. Please refresh the page or contact support.
+              </p>
+            )}
           </div>
 
           {/* Priority */}
@@ -154,10 +356,10 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="normal">Normal</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-                <SelectItem value="emergency">Emergency</SelectItem>
+                <SelectItem key="low" value="low">Low</SelectItem>
+                <SelectItem key="normal" value="normal">Normal</SelectItem>
+                <SelectItem key="urgent" value="urgent">Urgent</SelectItem>
+                <SelectItem key="emergency" value="emergency">Emergency</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -170,8 +372,11 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
               type="date"
               value={preferredDate}
               onChange={(e) => setPreferredDate(e.target.value)}
-              min={formatDateForApi(new Date())}
+              min={formatDateForApi(new Date(Date.now() + 24 * 60 * 60 * 1000))}
             />
+            <p className="text-xs text-gray-500">
+              Select a future date (tomorrow or later) when you'd prefer the maintenance to start. Leave empty if no preference.
+            </p>
           </div>
 
           {/* File Upload */}
@@ -205,7 +410,7 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
               <div className="space-y-2">
                 {files.map((file, index) => (
                   <div
-                    key={index}
+                    key={`${file.name}-${index}-${file.size}`}
                     className="flex items-center justify-between p-2 bg-muted rounded-lg"
                   >
                     <span className="text-sm truncate">{file.name}</span>

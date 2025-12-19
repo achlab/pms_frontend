@@ -15,6 +15,7 @@ interface AuthContextType extends AuthState {
   socialAuth: (provider: "google" | "facebook", role?: "landlord" | "tenant") => Promise<void>
   logout: () => Promise<void>
   forgotPassword: (email: string) => Promise<void>
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -150,6 +151,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await AuthService.forgotPassword(email)
   }
 
+  const refreshUser = async () => {
+    try {
+      const user = await AuthService.verifyToken()
+      if (user) {
+        setAuthState((prev) => ({
+          ...prev,
+          user,
+        }))
+        
+        // Update cookie with fresh user data
+        if (typeof document !== "undefined") {
+          document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(user))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
+        }
+      }
+    } catch (error) {
+      console.error("Failed to refresh user data:", error)
+    }
+  }
+
   const value: AuthContextType = {
     ...authState,
     login,
@@ -157,6 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     socialAuth,
     logout,
     forgotPassword,
+    refreshUser,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

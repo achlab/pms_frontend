@@ -5,24 +5,31 @@
 
 "use client";
 
+import { useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Building2, Calendar, DollarSign, User, MessageSquare, AlertTriangle } from "lucide-react";
+import { Building2, Calendar, DollarSign, User, MessageSquare, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import type { MaintenanceRequest } from "@/lib/api-types";
 import { formatCurrency, formatDate, formatStatus, getRelativeTime } from "@/lib/api-utils";
+import { ApproveRejectModal } from "./approve-reject-modal";
+import { useAuth } from "@/contexts/auth-context";
 
 interface MaintenanceRequestCardProps {
   request: MaintenanceRequest;
   onViewDetails?: (requestId: string) => void;
   onAddNote?: (requestId: string) => void;
+  onRefresh?: () => void;
 }
 
 export function MaintenanceRequestCard({
   request,
   onViewDetails,
   onAddNote,
+  onRefresh,
 }: MaintenanceRequestCardProps) {
+  const [showApproveRejectModal, setShowApproveRejectModal] = useState(false);
+  const { user } = useAuth();
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       received: "bg-blue-100 text-blue-800",
@@ -82,7 +89,10 @@ export function MaintenanceRequestCard({
         {/* Property & Unit */}
         <div className="flex items-center gap-2 text-sm">
           <Building2 className="h-4 w-4 text-muted-foreground" />
-          <span>{request.property.name} - Unit {request.unit.unit_number}</span>
+          <span>
+            {request.property.name}
+            {request.unit ? ` - Unit ${request.unit.unit_number}` : ' (Property-wide)'}
+          </span>
         </div>
 
         {/* Category */}
@@ -143,26 +153,73 @@ export function MaintenanceRequestCard({
         )}
 
         {/* Actions */}
-        <div className="flex gap-2">
-          {onViewDetails && (
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() => onViewDetails(request.id)}
-            >
-              View Details
-            </Button>
+        <div className="space-y-2">
+          {/* Debug Info - Temporary */}
+          {/* Debug: Show conditions for Review button */}
+          {user?.role === 'landlord' && (
+            <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+              <strong>Review Button Debug:</strong><br/>
+              User Role: {user?.role} (landlord: {user?.role === 'landlord' ? 'YES' : 'NO'})<br/>
+              User ID: {user?.id}<br/>
+              Request Landlord ID: {request.landlord_id || 'NULL'}<br/>
+              Property Landlord ID: {request.property?.landlord_id || 'NULL'}<br/>
+              Status: {request.status}<br/>
+              Is Owner: {(request.landlord_id === user?.id || request.property?.landlord_id === user?.id) ? 'YES' : 'NO'}<br/>
+              Can Review: {!['closed', 'cancelled'].includes(request.status) ? 'YES' : 'NO'}<br/>
+              Should Show: {(user?.role === 'landlord' && (request.landlord_id === user?.id || request.property?.landlord_id === user?.id) && !['closed', 'cancelled'].includes(request.status)) ? 'YES ✅' : 'NO ❌'}
+            </div>
           )}
-          {onAddNote && (
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => onAddNote(request.id)}
-            >
-              <MessageSquare className="h-4 w-4" />
-            </Button>
-          )}
+
+          {/* Action buttons */}
+          <div className="flex gap-2">
+            {/* Approval/Rejection button for landlords */}
+            {(() => {
+              const isLandlord = user?.role === 'landlord';
+              const isOwner = request.landlord_id === user?.id || 
+                             request.property?.landlord_id === user?.id;
+              // Allow review for: received, acknowledged, approved, rejected
+              // Exclude final states: closed, cancelled
+              const canReview = !['closed', 'cancelled'].includes(request.status);
+              
+              return isLandlord && isOwner && canReview;
+            })() && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 border-green-200 text-green-700 hover:bg-green-50"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowApproveRejectModal(true);
+                }}
+              >
+                <CheckCircle className="h-4 w-4 mr-1" />
+                Review Request
+              </Button>
+            )}
+
+            {/* Add Note button */}
+            {onAddNote && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => onAddNote(request.id)}
+              >
+                <MessageSquare className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
+
+        {/* Approval/Rejection Modal */}
+        <ApproveRejectModal
+          isOpen={showApproveRejectModal}
+          onClose={() => setShowApproveRejectModal(false)}
+          maintenanceRequest={request}
+          onSuccess={() => {
+            onRefresh?.();
+          }}
+        />
       </CardContent>
     </Card>
   );

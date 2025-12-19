@@ -73,12 +73,25 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
     rental_amount: 0,
     description: "",
     floor_number: undefined,
+    bedrooms: undefined,
+    bathrooms: undefined,
+    is_furnished: false,
+    utilities_included: false,
   })
+
+  // Sync propertyDetails when property prop changes
+  useEffect(() => {
+    setPropertyDetails(property)
+  }, [property])
 
   // Load data when modal opens - OPTIMIZED: Single batch load
   useEffect(() => {
+    console.log('🚪 Modal state changed:', { isOpen, propertyId: property.id })
     if (isOpen) {
+      console.log('✅ Modal is OPEN - Loading data...')
       loadAllData()
+    } else {
+      console.log('❌ Modal is CLOSED - Not loading data')
     }
   }, [isOpen, property.id])
 
@@ -86,6 +99,7 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
   const loadAllData = async () => {
     try {
       setLoading(true)
+      console.log('🔄 Loading data for property:', property.id)
       // Execute all API calls in parallel for better performance
       const [propertyResponse, statisticsResponse, financialsResponse, tenantsResponse] = await Promise.allSettled([
         landlordPropertyService.getProperty(property.id),
@@ -93,11 +107,31 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
         landlordPropertyService.getPropertyFinancials(property.id),
         landlordUserService.getAvailableTenants()
       ])
+      
+      console.log('📥 All Responses:', {
+        property: propertyResponse,
+        statistics: statisticsResponse,
+        financials: financialsResponse,
+        tenants: tenantsResponse
+      })
 
       // Handle property details
       if (propertyResponse.status === 'fulfilled' && propertyResponse.value.data) {
         const propertyData = propertyResponse.value.data;
-        setPropertyDetails(propertyData);
+        
+        console.log('🏠 Property Data:', propertyData);
+        console.log('📦 Units Data:', propertyData.units);
+        if (propertyData.units && propertyData.units.length > 0) {
+          console.log('🔍 First Unit Sample:', propertyData.units[0]);
+        }
+        
+        // Normalize camelCase to snake_case for is_active field
+        const normalizedData = {
+          ...propertyData,
+          is_active: (propertyData as any).isActive ?? propertyData.is_active,
+        };
+        
+        setPropertyDetails(normalizedData);
         
         // If statistics failed, calculate fallback from units data
         if (statisticsResponse.status === 'rejected' && propertyData.units) {
@@ -147,8 +181,11 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
 
       // Handle financials with fallback
       if (financialsResponse.status === 'fulfilled' && financialsResponse.value.data) {
+        console.log('✅ Financials Response:', financialsResponse.value)
+        console.log('📊 Financials Data:', financialsResponse.value.data)
         setFinancials(financialsResponse.value.data)
       } else {
+        console.log('❌ Financials Response Failed:', financialsResponse)
         // Set default structure to prevent undefined errors
         setFinancials({
           monthly_revenue: 0,
@@ -274,10 +311,34 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
     
     try {
       setLoading(true)
+      console.log(`${enable ? '✅ Enabling' : '❌ Disabling'} property:`, property.id);
+      
+      let response;
       if (enable) {
-        await landlordPropertyService.enableProperty(property.id)
+        response = await landlordPropertyService.enableProperty(property.id)
       } else {
-        await landlordPropertyService.disableProperty(property.id)
+        response = await landlordPropertyService.disableProperty(property.id)
+      }
+      
+      console.log('Property toggle response:', response);
+      
+      // Update local state immediately - normalize both camelCase and snake_case
+      if (response?.data) {
+        console.log('📊 Updating property status. Response data:', response.data);
+        const activeStatus = (response.data as any).isActive ?? response.data.is_active ?? enable;
+        console.log('📊 Active status (normalized):', activeStatus);
+        setPropertyDetails(prev => ({
+          ...prev,
+          is_active: activeStatus,
+          isActive: activeStatus,
+        }))
+      } else {
+        console.warn('⚠️ No response data, using enable value:', enable);
+        setPropertyDetails(prev => ({
+          ...prev,
+          is_active: enable,
+          isActive: enable,
+        }))
       }
       
       toast({
@@ -288,7 +349,8 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
       onPropertyUpdate()
       setTimeout(() => loadAllData(), 500)
     } catch (error: any) {
-      console.error(`${enable ? 'Enable' : 'Disable'} property error:`, error)
+      console.error(`❌ ${enable ? 'Enable' : 'Disable'} property error:`, error)
+      console.error('Error details:', error?.response)
       
       let errorMessage = `Failed to ${enable ? 'enable' : 'disable'} property.`
       if (error?.message?.includes("Too many requests")) {
@@ -310,10 +372,60 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
   const handleCreateUnit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Check if property is disabled
+    const activeValue = (propertyDetails as any).isActive ?? propertyDetails.is_active;
+    const isActive = activeValue !== false;
+    
+    if (!isActive) {
+      toast({
+        title: "Property Disabled",
+        description: "Cannot add units to a disabled property. Please enable the property first.",
+        variant: "destructive",
+      })
+      return
+    }
+    
     if (!unitFormData.unit_number || !unitFormData.rental_amount) {
       toast({
         title: "Validation Error",
         description: "Please fill in all required fields.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Additional validation for realistic values
+    if (unitFormData.rental_amount < 50) {
+      toast({
+        title: "Validation Error",
+        description: "Monthly rent must be at least ₵50.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (unitFormData.floor_number && unitFormData.floor_number > 100) {
+      toast({
+        title: "Validation Error",
+        description: "Floor number cannot exceed 100.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (unitFormData.bedrooms && unitFormData.bedrooms > 20) {
+      toast({
+        title: "Validation Error",
+        description: "Number of bedrooms cannot exceed 20.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (unitFormData.bathrooms && unitFormData.bathrooms > 20) {
+      toast({
+        title: "Validation Error",
+        description: "Number of bathrooms cannot exceed 20.",
         variant: "destructive",
       })
       return
@@ -335,6 +447,10 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
           rental_amount: 0,
           description: "",
           floor_number: undefined,
+          bedrooms: undefined,
+          bathrooms: undefined,
+          is_furnished: false,
+          utilities_included: false,
         })
         
         toast({
@@ -355,8 +471,11 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
       
       let errorMessage = "Failed to create unit."
       
-      // Handle specific error types
-      if (error?.message?.includes("Too many requests")) {
+      // Handle validation errors specifically
+      if (error?.status === 422 && error?.errors) {
+        const validationErrors = Object.values(error.errors).flat()
+        errorMessage = `Validation failed: ${validationErrors.join(', ')}`
+      } else if (error?.message?.includes("Too many requests")) {
         errorMessage = "Too many requests. Please wait a moment and try again."
       } else if (error?.message) {
         errorMessage = error.message
@@ -373,6 +492,19 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
   }
 
   const handleAssignTenant = async () => {
+    // Check if property is disabled
+    const activeValue = (propertyDetails as any).isActive ?? propertyDetails.is_active;
+    const isActive = activeValue !== false;
+    
+    if (!isActive) {
+      toast({
+        title: "Property Disabled",
+        description: "Cannot assign tenants to units in a disabled property. Please enable the property first.",
+        variant: "destructive",
+      })
+      return
+    }
+    
     if (!selectedUnit || !selectedTenantId) {
       toast({
         title: "Validation Error",
@@ -489,11 +621,37 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
   const handleToggleUnit = async (unit: any, enable: boolean) => {
     try {
       setLoading(true)
+      
+      console.log(`🔄 Attempting to ${enable ? 'enable' : 'disable'} unit:`, {
+        unitId: unit.id,
+        unitNumber: unit.unit_number,
+        currentStatus: unit.is_active,
+        propertyId: property.id
+      })
+      
+      let response;
       if (enable) {
-        await landlordUnitService.enableUnit(property.id, unit.id)
+        response = await landlordUnitService.enableUnit(property.id, unit.id)
       } else {
-        await landlordUnitService.disableUnit(property.id, unit.id, "Disabled by landlord")
+        response = await landlordUnitService.disableUnit(property.id, unit.id, "Disabled by landlord")
       }
+      
+      // Immediately update the unit state in the UI
+      const updatedUnit = response.data;
+      setPropertyDetails(prev => ({
+        ...prev,
+        units: (prev.units || []).map(u => 
+          u.id === unit.id 
+            ? { 
+                ...u, 
+                is_active: updatedUnit.is_active,
+                isActive: updatedUnit.is_active,
+                disabled_reason: updatedUnit.disabled_reason,
+                disabled_at: updatedUnit.disabled_at
+              }
+            : u
+        )
+      }));
       
       toast({
         title: "Success!",
@@ -504,12 +662,28 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
       setTimeout(() => loadAllData(), 500)
     } catch (error: any) {
       console.error(`${enable ? 'Enable' : 'Disable'} unit error:`, error)
+      console.error('Error details:', {
+        message: error?.message,
+        errors: error?.errors,
+        status: error?.status,
+        fullError: error
+      })
       
       let errorMessage = `Failed to ${enable ? 'enable' : 'disable'} unit.`
-      if (error?.message?.includes("disabled property")) {
-        errorMessage = "Cannot assign units from a disabled property."
-      } else if (error?.message?.includes("disabled unit")) {
-        errorMessage = "Cannot assign a disabled unit."
+      
+      // Check for specific validation errors
+      if (error?.errors) {
+        const errorKeys = Object.keys(error.errors)
+        if (errorKeys.length > 0) {
+          const firstError = error.errors[errorKeys[0]]
+          errorMessage = Array.isArray(firstError) ? firstError[0] : firstError
+        }
+      } else if (error?.message?.includes("already enabled")) {
+        errorMessage = "This unit is already enabled."
+      } else if (error?.message?.includes("already disabled")) {
+        errorMessage = "This unit is already disabled."
+      } else if (error?.message?.includes("disabled property")) {
+        errorMessage = "Cannot modify units in a disabled property."
       } else if (error?.message) {
         errorMessage = error.message
       }
@@ -525,6 +699,16 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
   }
 
   const units = propertyDetails.units || []
+  
+  // Normalize is_active check - handle both camelCase and snake_case
+  const activeValue = (propertyDetails as any).isActive ?? propertyDetails.is_active;
+  const isPropertyActive = activeValue !== false;
+  console.log('🔍 Property status check:', {
+    is_active: propertyDetails.is_active,
+    isActive: (propertyDetails as any).isActive,
+    normalized: activeValue,
+    computed: isPropertyActive
+  });
 
   return (
     <>
@@ -535,13 +719,13 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
               <DialogTitle className="text-2xl">{propertyDetails.name}</DialogTitle>
               <div className="flex items-center gap-4">
                 <span className="text-sm font-medium text-gray-700">Property Status:</span>
-                {propertyDetails.is_active ? (
+                {isPropertyActive ? (
                   <button
                     onClick={() => handleToggleProperty(false)}
                     disabled={loading}
                     className="flex items-center gap-2 px-4 py-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors disabled:opacity-50 border border-green-300"
                   >
-                    <ToggleRight className="w-5 h-5" />
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ToggleRight className="w-5 h-5" />}
                     <span className="text-sm font-medium">Active</span>
                   </button>
                 ) : (
@@ -550,7 +734,7 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
                     disabled={loading}
                     className="flex items-center gap-2 px-4 py-2 rounded-full bg-red-100 text-red-700 hover:bg-red-200 transition-colors disabled:opacity-50 border border-red-300"
                   >
-                    <ToggleLeft className="w-5 h-5" />
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ToggleLeft className="w-5 h-5" />}
                     <span className="text-sm font-medium">Disabled</span>
                   </button>
                 )}
@@ -604,8 +788,8 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
                     </div>
                     <div>
                       <Label className="text-sm font-medium text-gray-600">Status</Label>
-                      <Badge className={propertyDetails.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}>
-                        {propertyDetails.is_active ? "Active" : "Disabled"}
+                      <Badge className={isPropertyActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}>
+                        {isPropertyActive ? "Active" : "Disabled"}
                       </Badge>
                     </div>
                   </div>
@@ -703,8 +887,20 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold">Units Management</h3>
                 <Button
-                  onClick={() => setIsCreateUnitOpen(true)}
-                  className="bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700"
+                  onClick={() => {
+                    if (!isPropertyActive) {
+                      toast({
+                        title: "Property Disabled",
+                        description: "Enable the property first to add units.",
+                        variant: "destructive",
+                      })
+                      return
+                    }
+                    setIsCreateUnitOpen(true)
+                  }}
+                  disabled={!isPropertyActive}
+                  className="bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={!isPropertyActive ? "Enable property to add units" : "Add a new unit"}
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Unit
@@ -720,25 +916,62 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
                 </Card>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {units.map((unit) => (
+                  {units.map((unit) => {
+                    // Normalize unit active status at the top level
+                    const unitActiveValue = (unit as any).isActive ?? unit.is_active;
+                    const isUnitActive = unitActiveValue !== false;
+                    
+                    return (
                     <Card key={unit.id} className="hover:shadow-lg transition-shadow">
                       <CardHeader>
                         <div className="flex items-center justify-between">
                           <CardTitle className="text-lg">Unit {unit.unit_number}</CardTitle>
                           <div className="flex gap-1">
-                            <Badge className={unit.is_occupied ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}>
-                              {unit.is_occupied ? "Occupied" : "Available"}
-                            </Badge>
-                            <Badge className={unit.is_active ? "bg-gray-100 text-gray-700" : "bg-red-100 text-red-700"}>
-                              {unit.is_active ? "Active" : "Disabled"}
+                            {/* If unit is disabled, show Unavailable instead of Available/Occupied */}
+                            {!isUnitActive ? (
+                              <Badge className="bg-red-100 text-red-700">
+                                Unavailable
+                              </Badge>
+                            ) : (
+                              <Badge className={unit.is_occupied ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}>
+                                {unit.is_occupied ? "Occupied" : "Available"}
+                              </Badge>
+                            )}
+                            <Badge className={isUnitActive ? "bg-gray-100 text-gray-700" : "bg-red-100 text-red-700"}>
+                              {isUnitActive ? "Active" : "Disabled"}
                             </Badge>
                           </div>
                         </div>
                       </CardHeader>
                       <CardContent className="space-y-3">
-                        <div className="text-sm text-gray-600">
-                          <p><strong>Type:</strong> {unit.unit_type}</p>
-                          <p><strong>Rent:</strong> ₵{(unit.rental_amount || 0).toLocaleString()}/month</p>
+                        <div className="space-y-2">
+                          {/* Unit Details */}
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <p className="text-gray-500">Type</p>
+                              <p className="font-medium capitalize">{unit.unit_type?.replace(/_/g, ' ') || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Floor</p>
+                              <p className="font-medium">{unit.floor_number || 'N/A'}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Bedrooms</p>
+                              <p className="font-medium">{unit.bedrooms || 0}</p>
+                            </div>
+                            <div>
+                              <p className="text-gray-500">Bathrooms</p>
+                              <p className="font-medium">{unit.bathrooms || 0}</p>
+                            </div>
+                          </div>
+                          
+                          {/* Rent */}
+                          <div className="pt-2 border-t">
+                            <p className="text-gray-500 text-sm">Monthly Rent</p>
+                            <p className="text-lg font-bold text-green-600">
+                              ₵{(unit.rental_amount || 0).toLocaleString()}
+                            </p>
+                          </div>
                         </div>
 
                         {unit.tenant && (
@@ -759,9 +992,20 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
                             <Button
                               variant="outline"
                               size="sm"
-                              className="flex-1 text-red-600 hover:text-red-700"
-                              onClick={() => handleRemoveTenant(unit)}
-                              disabled={loading}
+                              className="flex-1 text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                              onClick={() => {
+                                if (!isUnitActive) {
+                                  toast({
+                                    title: "Unit Disabled",
+                                    description: "Cannot remove tenant from a disabled unit. Enable the unit first.",
+                                    variant: "destructive",
+                                  })
+                                  return
+                                }
+                                handleRemoveTenant(unit)
+                              }}
+                              disabled={loading || !isUnitActive}
+                              title={!isUnitActive ? "Enable unit to remove tenant" : "Remove tenant from this unit"}
                             >
                               <UserMinus className="w-3 h-3 mr-1" />
                               Remove Tenant
@@ -770,19 +1014,37 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
                             <Button
                               variant="outline"
                               size="sm"
-                              className="flex-1"
+                              className="flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
                               onClick={() => {
+                                if (!isPropertyActive) {
+                                  toast({
+                                    title: "Property Disabled",
+                                    description: "Enable the property first to assign tenants.",
+                                    variant: "destructive",
+                                  })
+                                  return
+                                }
+                                if (!isUnitActive) {
+                                  toast({
+                                    title: "Unit Disabled",
+                                    description: "Enable this unit first to assign tenants.",
+                                    variant: "destructive",
+                                  })
+                                  return
+                                }
                                 setSelectedUnit(unit)
                                 setIsAssignTenantOpen(true)
                               }}
-                              disabled={loading || availableTenants.length === 0}
+                              disabled={loading || availableTenants.length === 0 || !isPropertyActive || !isUnitActive}
+                              title={!isPropertyActive ? "Enable property to assign tenants" : !isUnitActive ? "Enable unit to assign tenants" : availableTenants.length === 0 ? "No available tenants" : "Assign a tenant to this unit"}
                             >
                               <UserPlus className="w-3 h-3 mr-1" />
                               Assign Tenant
                             </Button>
                           )}
                           
-                          {unit.is_active ? (
+                          {/* Use the normalized isUnitActive from parent scope */}
+                          {isUnitActive ? (
                             <button
                               onClick={() => handleToggleUnit(unit, false)}
                               disabled={loading}
@@ -806,7 +1068,7 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
                         </div>
                       </CardContent>
                     </Card>
-                  ))}
+                  )})}
                 </div>
               )}
             </TabsContent>
@@ -933,7 +1195,8 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
                   onChange={(e) => setUnitFormData({ ...unitFormData, rental_amount: parseFloat(e.target.value) || 0 })}
                   placeholder="1200.00"
                   required
-                  min="0"
+                  min="50"
+                  max="50000"
                   step="0.01"
                 />
               </div>
@@ -946,6 +1209,32 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
                   onChange={(e) => setUnitFormData({ ...unitFormData, floor_number: parseInt(e.target.value) || undefined })}
                   placeholder="1"
                   min="0"
+                  max="100"
+                />
+              </div>
+              <div>
+                <Label htmlFor="bedrooms">Bedrooms</Label>
+                <Input
+                  id="bedrooms"
+                  type="number"
+                  value={unitFormData.bedrooms || ""}
+                  onChange={(e) => setUnitFormData({ ...unitFormData, bedrooms: parseInt(e.target.value) || undefined })}
+                  placeholder="2"
+                  min="0"
+                  max="20"
+                />
+              </div>
+              <div>
+                <Label htmlFor="bathrooms">Bathrooms</Label>
+                <Input
+                  id="bathrooms"
+                  type="number"
+                  value={unitFormData.bathrooms || ""}
+                  onChange={(e) => setUnitFormData({ ...unitFormData, bathrooms: parseInt(e.target.value) || undefined })}
+                  placeholder="1"
+                  min="0"
+                  max="20"
+                  step="0.5"
                 />
               </div>
             </div>

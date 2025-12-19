@@ -15,6 +15,9 @@ export interface User {
   role: "super_admin" | "landlord" | "tenant" | "caretaker";
   phone?: string;
   avatar?: string;
+  profile_picture?: string;
+  profile_picture_url?: string;
+  photo_url?: string;
   isVerified: boolean;
   createdAt: string;
 }
@@ -35,7 +38,10 @@ function convertApiUserToLegacyUser(apiUser: ApiUser): User {
     name: apiUser.name,
     role: apiUser.role as "super_admin" | "landlord" | "tenant" | "caretaker",
     phone: apiUser.phone,
-    avatar: apiUser.profile_picture || undefined,
+    avatar: apiUser.profile_picture || apiUser.photo_url || undefined,
+    profile_picture: apiUser.profile_picture,
+    profile_picture_url: apiUser.profile_picture_url,
+    photo_url: apiUser.photo_url,
     isVerified: apiUser.is_verified,
     createdAt: apiUser.created_at,
   };

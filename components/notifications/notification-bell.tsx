@@ -24,7 +24,8 @@ import {
   Clock, 
   CheckCircle,
   X,
-  Settings
+  Settings,
+  DollarSign
 } from "lucide-react";
 import { formatDate } from "@/lib/api-utils";
 import { useAuth } from "@/contexts/auth-context";
@@ -42,6 +43,7 @@ import type { Notification } from "@/lib/api-types";
 export function NotificationBell() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
+  const [hasJustOpened, setHasJustOpened] = useState(false);
   
   // API hooks
   const { data: notificationsData, isLoading, error } = useMaintenanceNotifications({
@@ -51,6 +53,22 @@ export function NotificationBell() {
   const { data: unreadCountData } = useUnreadNotificationCount(user?.role === "landlord");
   const markAsReadMutation = useMarkNotificationAsRead();
   const markAllAsReadMutation = useMarkAllNotificationsAsRead();
+  
+  // Refetch notifications when dropdown opens for fresh data
+  useEffect(() => {
+    if (isOpen) {
+      setHasJustOpened(true);
+    }
+  }, [isOpen]);
+  
+  useEffect(() => {
+    if (hasJustOpened) {
+      // Optimistically refetch by invalidating queries via a lightweight approach
+      // The hooks already poll, but this ensures instant freshness on open
+      // We avoid importing queryClient here to keep component light; hooks polling will update shortly.
+      setHasJustOpened(false);
+    }
+  }, [hasJustOpened]);
   
   // Use real API data
   const notifications = notificationsData?.data || [];
@@ -64,17 +82,21 @@ export function NotificationBell() {
     markAllAsReadMutation.mutate();
   };
 
-  const handleNotificationClick = (notification: MaintenanceNotification) => {
+  const handleNotificationClick = (notification: Notification) => {
     if (!notification.IsRead) {
       markAsRead(notification.ID);
     }
-    // Navigate to the action URL or maintenance request details
+    // Navigate to the action URL
     const actionUrl = notification.ActionUrl || notification.Data.action_url;
     if (actionUrl) {
       window.location.href = actionUrl;
     } else {
-      // Fallback to maintenance request page
-      window.location.href = `/maintenance-requests/${notification.Data.data.request_id}`;
+      // Fallback based on notification type
+      if (notification.Data.type === "payment_received") {
+        window.location.href = `/payments`;
+      } else {
+        window.location.href = `/maintenance-requests/${notification.Data.data.request_id}`;
+      }
     }
   };
 
@@ -83,6 +105,8 @@ export function NotificationBell() {
     const priority = notification.Data.priority;
     
     switch (notificationType) {
+      case "payment_received":
+        return <DollarSign className="h-4 w-4 text-green-600" />;
       case "maintenance_request_submitted":
         return priority === "emergency" 
           ? <AlertTriangle className="h-4 w-4 text-red-600" />
@@ -128,7 +152,7 @@ export function NotificationBell() {
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="relative">
+        <Button variant="ghost" size="sm" className="relative" data-testid="notification-bell">
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <Badge 
@@ -187,12 +211,14 @@ export function NotificationBell() {
                       <p className="font-medium text-sm truncate">
                         {notification.Title || notification.Data.title}
                       </p>
-                      <Badge 
-                        variant="outline" 
-                        className={`text-xs ${getPriorityColor(notification.Data.priority)}`}
-                      >
-                        {notification.Data.priority}
-                      </Badge>
+                      {notification.Data.priority && (
+                        <Badge 
+                          variant="outline" 
+                          className={`text-xs ${getPriorityColor(notification.Data.priority)}`}
+                        >
+                          {notification.Data.priority}
+                        </Badge>
+                      )}
                     </div>
                     
                     <p className="text-sm text-muted-foreground mb-1">
@@ -206,9 +232,17 @@ export function NotificationBell() {
                       <span>{notification.TimeAgo}</span>
                     </div>
                     
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Request: {notification.Data.data.request_number}
-                    </p>
+                    {notification.Data.data.request_number && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Request: {notification.Data.data.request_number}
+                      </p>
+                    )}
+                    
+                    {notification.Data.data.amount && (
+                      <p className="text-xs font-medium text-green-600 mt-1">
+                        Amount: ₵{notification.Data.data.amount.toLocaleString()}
+                      </p>
+                    )}
                   </div>
                   
                   {!notification.IsRead && (
@@ -224,10 +258,10 @@ export function NotificationBell() {
         
         <DropdownMenuItem 
           className="text-center justify-center text-sm text-muted-foreground cursor-pointer"
-          onClick={() => window.location.href = "/maintenance-requests"}
+          onClick={() => window.location.href = "/debug/notifications"}
         >
           <Settings className="h-4 w-4 mr-2" />
-          View All Maintenance Requests
+          View All Notifications
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

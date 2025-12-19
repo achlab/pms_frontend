@@ -27,9 +27,11 @@ export function PropertyInfoCard({ property }: PropertyInfoCardProps) {
         {/* Property Name */}
         <div>
           <h3 className="text-xl font-semibold mb-1">{property.name}</h3>
-          <p className="text-sm text-muted-foreground capitalize">
-            {property.property_type.replace(/_/g, ' ')}
-          </p>
+          {property.property_type && (
+            <p className="text-sm text-muted-foreground capitalize">
+              {property.property_type.replace(/_/g, ' ')}
+            </p>
+          )}
         </div>
 
         {/* Description */}

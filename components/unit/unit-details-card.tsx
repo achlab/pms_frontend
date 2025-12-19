@@ -77,7 +77,7 @@ export function UnitDetailsCard({ unit }: UnitDetailsCardProps) {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Bedrooms</p>
-              <p className="font-medium">{unit.bedrooms} {unit.bedrooms === 1 ? 'Bedroom' : 'Bedrooms'}</p>
+              <p className="font-medium">{unit.bedrooms || 0} {unit.bedrooms === 1 ? 'Bedroom' : 'Bedrooms'}</p>
             </div>
           </div>
 
@@ -88,20 +88,22 @@ export function UnitDetailsCard({ unit }: UnitDetailsCardProps) {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Bathrooms</p>
-              <p className="font-medium">{unit.bathrooms} {unit.bathrooms === 1 ? 'Bathroom' : 'Bathrooms'}</p>
+              <p className="font-medium">{unit.bathrooms || 0} {unit.bathrooms === 1 ? 'Bathroom' : 'Bathrooms'}</p>
             </div>
           </div>
 
           {/* Square Footage */}
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/20">
-              <Maximize className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+          {unit.square_footage && (
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100 dark:bg-orange-900/20">
+                <Maximize className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Square Footage</p>
+                <p className="font-medium">{unit.square_footage.toLocaleString()} sq ft</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Square Footage</p>
-              <p className="font-medium">{unit.square_footage.toLocaleString()} sq ft</p>
-            </div>
-          </div>
+          )}
 
           {/* Monthly Rent */}
           <div className="flex items-center gap-3">
@@ -111,7 +113,7 @@ export function UnitDetailsCard({ unit }: UnitDetailsCardProps) {
             <div>
               <p className="text-sm text-muted-foreground">Monthly Rent</p>
               <p className="font-medium text-lg">
-                GH₵ {unit.monthly_rent.toLocaleString(undefined, {
+                GH₵ {((unit as any).monthly_rent || (unit as any).rental_amount || 0).toLocaleString(undefined, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2
                 })}

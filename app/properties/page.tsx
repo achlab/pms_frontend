@@ -97,7 +97,12 @@ export default function PropertiesPage() {
         delete dataToSubmit.caretaker_id
       }
 
+      console.log('📝 Creating property with data:', dataToSubmit);
       const result = await createProperty(dataToSubmit)
+      console.log('✅ Property created - Result:', JSON.stringify(result, null, 2));
+      console.log('   - Property ID:', result?.id);
+      console.log('   - Caretaker ID in result:', (result as any)?.caretakerId || (result as any)?.caretaker_id);
+      console.log('   - Caretaker object in result:', (result as any)?.caretaker);
 
       if (result) {
         // Close dialog immediately
@@ -119,7 +124,15 @@ export default function PropertiesPage() {
         })
 
         // Refetch properties list
-        refetchProperties()
+        console.log('🔄 Refetching properties...');
+        await refetchProperties()
+        console.log('✅ Properties refetched');
+        
+        // Check if the newly created property has caretaker data
+        const newProperty = properties.find(p => p.id === result.id);
+        if (newProperty) {
+          console.log('🆕 Newly created property after refetch:', JSON.stringify(newProperty, null, 2));
+        }
       } else {
         toast({
           title: "Error",
@@ -128,10 +141,12 @@ export default function PropertiesPage() {
         })
       }
     } catch (error: any) {
-      console.error("Create property error:", error)
+      console.error("❌ Create property error:", error)
+      console.error("Error response:", error?.response?.data)
+      const errorMessage = error?.response?.data?.Message || error?.response?.data?.message || error?.message || "Failed to create property. Please check all fields.";
       toast({
-        title: "Error",
-        description: error?.message || "Failed to create property.",
+        title: "Property Creation Failed",
+        description: errorMessage,
         variant: "destructive",
       })
     }
@@ -172,10 +187,20 @@ export default function PropertiesPage() {
         refetchProperties()
       }
     } catch (error: any) {
-      console.error("Assign caretaker error:", error)
+      console.error("❌ Assign caretaker error:", error)
+      console.error("Error details:", error?.response)
+      
+      let errorMessage = "Failed to assign caretaker to property.";
+      
+      if (error?.response?.status === 405) {
+        errorMessage = "Backend API error: PUT/PATCH method not allowed on /properties/{id} endpoint. Backend needs to enable property update support.";
+      } else {
+        errorMessage = error?.response?.data?.message || error?.message || errorMessage;
+      }
+      
       toast({
-        title: "Error",
-        description: error?.message || "Failed to assign caretaker to property.",
+        title: "Caretaker Assignment Failed",
+        description: errorMessage,
         variant: "destructive",
       })
     } finally {
@@ -187,13 +212,17 @@ export default function PropertiesPage() {
     try {
       setIsAssigning(true)
       
+      // Get caretaker info BEFORE removing
+      const caretakerId = (property as any).caretakerId || (property as any).caretaker_id;
+      const caretaker = property.caretaker || caretakers.find((c) => c.id === caretakerId);
+      const caretakerName = caretaker?.name || "Caretaker";
+      
       const response = await landlordPropertyService.removeCaretaker(property.id)
 
       if (response.data) {
-        const caretaker = caretakers.find((c) => c.id === property.caretaker_id)
         toast({
           title: "Success!",
-          description: `${caretaker?.name} removed from ${property.name}.`,
+          description: `${caretakerName} removed from ${property.name}.`,
         })
 
         // Refetch properties to show updated data
@@ -432,14 +461,25 @@ export default function PropertiesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredProperties.map((property) => {
-              const caretaker = caretakers.find((c) => c.id === property.caretaker_id)
+              // Debug logging - log full property object once
+              if (property.name === filteredProperties[0]?.name) {
+                console.log('📦 Sample Property Object:', JSON.stringify(property, null, 2));
+                console.log('👥 Available Caretakers:', caretakers.map(c => ({ id: c.id, name: c.name })));
+              }
+              
+              // API returns camelCase fields: caretakerId, not caretaker_id
+              const caretakerId = (property as any).caretakerId || (property as any).caretaker_id;
+              const caretaker = property.caretaker || caretakers.find((c) => c.id === caretakerId);
+              const isActive = (property as any).isActive ?? property.is_active ?? true;
               
               return (
                 <Card key={property.id} className="hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg">{property.name}</CardTitle>
-                      <Badge className="bg-indigo-100 text-indigo-700">Active</Badge>
+                      <Badge className={isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}>
+                        {isActive ? "Active" : "Inactive"}
+                      </Badge>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -457,12 +497,12 @@ export default function PropertiesPage() {
                     )}
 
                     {/* Caretaker */}
-                    {property.caretaker ? (
+                    {caretaker ? (
                       <div className="flex items-center text-sm text-gray-600">
                         <User className="w-4 h-4 mr-2 flex-shrink-0" />
                         <div className="flex flex-col">
-                          <span className="font-medium">{property.caretaker.name}</span>
-                          <span className="text-xs text-gray-500">{property.caretaker.email}</span>
+                          <span className="font-medium">{caretaker.name}</span>
+                          <span className="text-xs text-gray-500">{caretaker.email}</span>
                         </div>
                       </div>
                     ) : (
@@ -551,11 +591,20 @@ export default function PropertiesPage() {
                               size="sm"
                               className="flex-1"
                               onClick={() => {
+                                if (!isActive) {
+                                  toast({
+                                    title: "Property Disabled",
+                                    description: "Enable the property first to reassign caretaker.",
+                                    variant: "destructive",
+                                  })
+                                  return
+                                }
                                 setSelectedProperty(property)
                                 setSelectedCaretakerId(property.caretaker_id || "")
                                 setIsAssignCaretakerOpen(true)
                               }}
-                              disabled={isAssigning}
+                              disabled={isAssigning || !isActive}
+                              title={!isActive ? "Enable property to reassign caretaker" : "Reassign caretaker"}
                             >
                               <UserPlus className="w-3 h-3 mr-1" />
                               Reassign
@@ -577,11 +626,20 @@ export default function PropertiesPage() {
                             size="sm"
                             className="w-full"
                             onClick={() => {
+                              if (!isActive) {
+                                toast({
+                                  title: "Property Disabled",
+                                  description: "Enable the property first to assign a caretaker.",
+                                  variant: "destructive",
+                                })
+                                return
+                              }
                               setSelectedProperty(property)
                               setSelectedCaretakerId("")
                               setIsAssignCaretakerOpen(true)
                             }}
-                            disabled={isAssigning || caretakers.length === 0}
+                            disabled={isAssigning || caretakers.length === 0 || !isActive}
+                            title={!isActive ? "Enable property to assign caretaker" : caretakers.length === 0 ? "No caretakers available" : "Assign a caretaker"}
                           >
                             <UserPlus className="w-3 h-3 mr-1" />
                             Assign Caretaker

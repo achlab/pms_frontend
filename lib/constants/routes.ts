@@ -32,6 +32,7 @@ export const PROTECTED_ROUTES = {
     "/tenants",
     "/invoices",
     "/payments",
+    "/payment-methods",
     "/maintenance",
     "/rent-roll",
     "/reports",
@@ -48,6 +49,7 @@ export const PROTECTED_ROUTES = {
   ],
   tenant: [
     "/tenant/dashboard",
+    "/tenant/profile",
     "/dashboard",
     "/my-lease",
     "/my-unit",

@@ -61,6 +61,26 @@ class PaymentService {
       data
     );
   }
+
+  /**
+   * Update payment status (landlord confirms/rejects)
+   */
+  async updatePaymentStatus(
+    paymentId: string,
+    status: 'completed' | 'pending' | 'failed' | 'recorded' | 'partially_paid'
+  ): Promise<ApiResponse<Payment>> {
+    return apiClient.patch<ApiResponse<Payment>>(
+      `/payments/${paymentId}/status`,
+      { status }
+    );
+  }
+
+  /**
+   * Get single payment details
+   */
+  async getPaymentDetails(paymentId: string): Promise<ApiResponse<Payment>> {
+    return apiClient.get<ApiResponse<Payment>>(`/payments/${paymentId}`);
+  }
 }
 
 // Export singleton instance

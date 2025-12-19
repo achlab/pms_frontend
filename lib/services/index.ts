@@ -47,6 +47,16 @@ export {
 } from "./caretaker-lease.service";
 
 // ============================================
+// TENANT-SPECIFIC SERVICES
+// ============================================
+
+// Tenant Property & Unit Management
+export { 
+  tenantPropertyService, 
+  default as TenantPropertyService 
+} from "./tenant-property.service";
+
+// ============================================
 // LANDLORD-SPECIFIC SERVICES
 // ============================================
 

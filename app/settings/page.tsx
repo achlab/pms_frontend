@@ -7,8 +7,10 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { MainLayout } from "@/components/main-layout";
 import { useProfile, useUploadProfilePicture, useDeleteProfilePicture } from "@/lib/hooks/use-profile";
 import { useChangePassword } from "@/lib/hooks/use-auth";
+import { useAuth } from "@/contexts/auth-context";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,19 +29,20 @@ import {
   Eye,
   EyeOff,
   Camera,
+  UserCircle,
+  ChevronRight,
 } from "lucide-react";
 import { getErrorMessage } from "@/lib/api-utils";
 
 export default function SettingsPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { refreshUser } = useAuth();
 
-  const { data, isLoading: loadingProfile, refetch } = useProfile();
-  const { mutate: uploadPicture, isLoading: uploading } = useUploadProfilePicture();
-  const { mutate: deletePicture, isLoading: deleting } = useDeleteProfilePicture();
+  const { data: profile, isLoading: loadingProfile, error: profileError, refetch } = useProfile();
+  const uploadPictureMutation = useUploadProfilePicture();
+  const deletePictureMutation = useDeleteProfilePicture();
   const { mutate: changePassword, isLoading: changingPassword } = useChangePassword();
-
-  const profile = data?.data;
 
   // Password form state
   const [currentPassword, setCurrentPassword] = useState("");
@@ -70,9 +73,11 @@ export default function SettingsPage() {
     }
 
     try {
-      await uploadPicture(file);
+      await uploadPictureMutation.mutateAsync(file);
       toast.success("Profile picture updated successfully!");
-      refetch();
+      // Refresh auth context to update sidebar
+      await refreshUser();
+      await refetch();
     } catch (error) {
       toast.error(getErrorMessage(error));
     }
@@ -88,10 +93,12 @@ export default function SettingsPage() {
       return;
     }
 
+      // Refresh auth context to update sidebar
+      await refreshUser();
+      await refetch();
     try {
-      await deletePicture();
+      await deletePictureMutation.mutateAsync();
       toast.success("Profile picture deleted successfully!");
-      refetch();
     } catch (error) {
       toast.error(getErrorMessage(error));
     }
@@ -129,8 +136,8 @@ export default function SettingsPage() {
     try {
       await changePassword({
         current_password: currentPassword,
-        new_password: newPassword,
-        new_password_confirmation: confirmPassword,
+        password: newPassword,
+        password_confirmation: confirmPassword,
       });
 
       toast.success("Password changed successfully!");
@@ -146,31 +153,43 @@ export default function SettingsPage() {
 
   if (loadingProfile) {
     return (
-      <div className="container mx-auto py-6 space-y-6">
-        <Skeleton className="h-10 w-48" />
-        <div className="grid gap-6 md:grid-cols-2">
-          <Skeleton className="h-96" />
-          <Skeleton className="h-96" />
+      <MainLayout>
+        <div className="container mx-auto py-6 space-y-6">
+          <Skeleton className="h-10 w-48" />
+          <div className="grid gap-6 md:grid-cols-2">
+            <Skeleton className="h-96" />
+            <Skeleton className="h-96" />
+          </div>
         </div>
-      </div>
+      </MainLayout>
     );
   }
 
-  if (!profile) {
+  if (profileError || !profile) {
     return (
-      <div className="container mx-auto py-6">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Failed to load profile information.
-          </AlertDescription>
-        </Alert>
-      </div>
+      <MainLayout>
+        <div className="container mx-auto py-6">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              {profileError ? getErrorMessage(profileError) : "Failed to load profile information."}
+            </AlertDescription>
+          </Alert>
+          <Button 
+            onClick={() => refetch()} 
+            className="mt-4"
+            variant="outline"
+          >
+            Retry
+          </Button>
+        </div>
+      </MainLayout>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <MainLayout>
+      <div className="container mx-auto py-6 space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button
@@ -188,6 +207,31 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Profile Information Link Card */}
+      <Card className="cursor-pointer hover:bg-accent/50 transition-colors" onClick={() => {
+        const profilePath = profile.role === 'landlord' ? '/landlord/profile' : 
+                           profile.role === 'caretaker' ? '/caretaker/profile' : 
+                           '/tenant/profile';
+        router.push(profilePath);
+      }}>
+        <CardContent className="py-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <UserCircle className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">Profile Information</h3>
+                <p className="text-sm text-muted-foreground">
+                  Update your bio, contact details, and personal information
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid gap-6 md:grid-cols-2">
         {/* Profile Picture Settings */}
         <Card>
@@ -201,9 +245,9 @@ export default function SettingsPage() {
             <div className="flex flex-col items-center">
               {/* Current Picture */}
               <div className="relative group">
-                {profile.profile_picture ? (
+                {(profile.profile_picture_url || profile.profile_picture || profile.photo_url) ? (
                   <img
-                    src={profile.profile_picture}
+                    src={profile.profile_picture_url || profile.profile_picture || profile.photo_url}
                     alt={profile.name}
                     className="h-32 w-32 rounded-full object-cover border-4 border-background shadow-lg"
                   />
@@ -230,17 +274,17 @@ export default function SettingsPage() {
               <div className="flex gap-2 mt-6 w-full">
                 <Button
                   onClick={handleFileSelect}
-                  disabled={uploading || deleting}
+                  disabled={uploadPictureMutation.isLoading || deletePictureMutation.isLoading}
                   className="flex-1"
                 >
                   <Upload className="h-4 w-4 mr-2" />
-                  {uploading ? "Uploading..." : "Upload New"}
+                  {uploadPictureMutation.isLoading ? "Uploading..." : "Upload New"}
                 </Button>
-                {profile.profile_picture && (
+                {(profile.profile_picture_url || profile.profile_picture || profile.photo_url) && (
                   <Button
                     variant="destructive"
                     onClick={handleDeletePicture}
-                    disabled={uploading || deleting}
+                    disabled={uploadPictureMutation.isLoading || deletePictureMutation.isLoading}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -402,7 +446,8 @@ export default function SettingsPage() {
           </ul>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </MainLayout>
   );
 }
 

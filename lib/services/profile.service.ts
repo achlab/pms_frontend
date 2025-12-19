@@ -12,6 +12,44 @@ import type {
   ApiResponse,
 } from "../api-types";
 
+export interface LandlordProfile {
+  id?: number;
+  email?: string;
+  full_name?: string;
+  phone?: string;
+  bio?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  photo_url?: string;
+}
+
+export interface CaretakerProfile {
+  id?: number;
+  email?: string;
+  full_name?: string;
+  phone?: string;
+  bio?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  emergency_contact?: string;
+  working_hours?: string;
+  photo_url?: string;
+}
+
+export interface TenantProfile {
+  id?: number;
+  email?: string;
+  full_name?: string;
+  phone?: string;
+  bio?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  photo_url?: string;
+}
+
 class ProfileService {
   private static instance: ProfileService;
 
@@ -124,6 +162,66 @@ class ProfileService {
    */
   updateStoredUser(user: User): void {
     tokenManager.setUserData(user);
+  }
+
+  /**
+   * Get landlord profile
+   */
+  async getLandlordProfile(): Promise<ApiResponse<LandlordProfile>> {
+    return apiClient.get<ApiResponse<LandlordProfile>>("/landlord/profile");
+  }
+
+  /**
+   * Update landlord profile
+   */
+  async updateLandlordProfile(data: Partial<LandlordProfile>): Promise<ApiResponse<LandlordProfile>> {
+    return apiClient.put<ApiResponse<LandlordProfile>>("/landlord/profile", data);
+  }
+
+  /**
+   * Get caretaker profile
+   */
+  async getCaretakerProfile(): Promise<ApiResponse<CaretakerProfile>> {
+    return apiClient.get<ApiResponse<CaretakerProfile>>("/caretaker/profile");
+  }
+
+  /**
+   * Update caretaker profile
+   */
+  async updateCaretakerProfile(data: Partial<CaretakerProfile>): Promise<ApiResponse<CaretakerProfile>> {
+    return apiClient.put<ApiResponse<CaretakerProfile>>("/caretaker/profile", data);
+  }
+
+  /**
+   * Get tenant profile
+   */
+  async getTenantProfile(): Promise<ApiResponse<TenantProfile>> {
+    return apiClient.get<ApiResponse<TenantProfile>>("/tenant/profile");
+  }
+
+  /**
+   * Update tenant profile
+   */
+  async updateTenantProfile(data: Partial<TenantProfile>): Promise<ApiResponse<TenantProfile>> {
+    return apiClient.put<ApiResponse<TenantProfile>>("/tenant/profile", data);
+  }
+
+  /**
+   * Upload profile photo (for landlord/caretaker profiles)
+   */
+  async uploadProfilePhoto(file: File): Promise<ApiResponse<{ url: string }>> {
+    const formData = new FormData();
+    formData.append("photo", file);
+
+    return apiClient.post<ApiResponse<{ url: string }>>(
+      "/profile/upload-photo",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
   }
 }
 

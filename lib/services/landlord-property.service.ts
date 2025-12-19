@@ -75,7 +75,7 @@ class LandlordPropertyService {
     propertyId: string,
     data: UpdatePropertyRequest
   ): Promise<ApiResponse<LandlordProperty>> {
-    return apiClient.put<ApiResponse<LandlordProperty>>(
+    return apiClient.patch<ApiResponse<LandlordProperty>>(
       `/properties/${propertyId}`,
       data
     );
@@ -262,7 +262,7 @@ class LandlordPropertyService {
    * @returns Updated property
    */
   async removeCaretaker(propertyId: string): Promise<ApiResponse<LandlordProperty>> {
-    return this.updateProperty(propertyId, { caretaker_id: undefined });
+    return this.updateProperty(propertyId, { caretaker_id: null as any });
   }
 
   /**

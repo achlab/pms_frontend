@@ -19,6 +19,7 @@ interface MaintenanceRequestListProps {
   onViewDetails?: (requestId: string) => void;
   onAddNote?: (requestId: string) => void;
   onCreateNew?: () => void;
+  onRefresh?: () => void;
   onFilterChange?: (filters: {
     status?: MaintenanceStatus;
     priority?: MaintenancePriority;
@@ -31,6 +32,7 @@ export function MaintenanceRequestList({
   onViewDetails,
   onAddNote,
   onCreateNew,
+  onRefresh,
   onFilterChange,
 }: MaintenanceRequestListProps) {
   const { user } = useAuth();
@@ -173,6 +175,7 @@ export function MaintenanceRequestList({
               request={request}
               onViewDetails={onViewDetails}
               onAddNote={onAddNote}
+              onRefresh={onRefresh}
             />
           ))}
         </div>

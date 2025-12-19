@@ -179,7 +179,16 @@ export function parseApiDate(dateString: string): Date {
 /**
  * Format currency for display
  */
-export function formatCurrency(amount: number, currency: string = "GHS"): string {
+export function formatCurrency(amount?: number | null, currency: string = "GHS"): string {
+  if (amount === undefined || amount === null || isNaN(amount)) {
+    return new Intl.NumberFormat("en-GH", {
+      style: "currency",
+      currency: currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(0);
+  }
+  
   return new Intl.NumberFormat("en-GH", {
     style: "currency",
     currency: currency,
@@ -191,13 +200,21 @@ export function formatCurrency(amount: number, currency: string = "GHS"): string
 /**
  * Format date for display
  */
-export function formatDate(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  return new Intl.DateTimeFormat("en-GH", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(d);
+export function formatDate(date?: Date | string | null): string {
+  if (!date) return 'N/A';
+  
+  try {
+    const d = typeof date === "string" ? new Date(date) : date;
+    if (isNaN(d.getTime())) return 'Invalid Date';
+    
+    return new Intl.DateTimeFormat("en-GH", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    }).format(d);
+  } catch (error) {
+    return 'Invalid Date';
+  }
 }
 
 /**
@@ -357,8 +374,21 @@ export function capitalize(str: string): string {
 /**
  * Format status for display
  */
-export function formatStatus(status: string): string {
-  return status
+export function formatStatus(status?: string | null): string {
+  if (!status) return 'N/A';
+  
+  // Custom status labels
+  const statusLabels: Record<string, string> = {
+    'completed': 'Full Payment / Rent Paid',
+    'partially_paid': 'Partial Payment',
+    'pending': 'Pending Approval',
+    'recorded': 'Recorded',
+    'failed': 'Failed / Rejected',
+    'paid': 'Paid',
+    'overdue': 'Overdue',
+  };
+  
+  return statusLabels[status] || status
     .split("_")
     .map(word => capitalize(word))
     .join(" ");

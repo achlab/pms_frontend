@@ -19,12 +19,14 @@ export default function PaymentHistoryPage() {
   const [startDate, setStartDate] = useState<string>();
   const [endDate, setEndDate] = useState<string>();
 
-  const { data, isLoading, error, refetch, isFetching } = usePaymentHistory({
+  const { data, isLoading, error, refetch, isFetching, isStale } = usePaymentHistory({
     payment_method: paymentMethodFilter,
     start_date: startDate,
     end_date: endDate,
     page: currentPage,
     per_page: 15,
+    sort_by: "created_at",
+    sort_order: "desc", // Latest payments first
   });
 
   if (isLoading) {
@@ -71,11 +73,20 @@ export default function PaymentHistoryPage() {
           {/* Page Header */}
           <div className="flex items-center justify-between">
             <div className="space-y-2">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 via-blue-600 to-purple-600 dark:from-white dark:via-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
-                Payment History
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 via-blue-600 to-purple-600 dark:from-white dark:via-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
+                  Payment History
+                </h1>
+                {isStale && (
+                  <div className="flex items-center gap-2 px-3 py-1 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-full">
+                    <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs font-medium text-yellow-700 dark:text-yellow-400">Cached Data</span>
+                  </div>
+                )}
+              </div>
               <p className="text-lg text-muted-foreground">
                 View all your payment transactions
+                {isStale && " (Updating...)"}
               </p>
             </div>
             <div className="flex gap-2">
@@ -93,23 +104,23 @@ export default function PaymentHistoryPage() {
           {/* Summary Cards */}
           {summary && (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div className="bg-white dark:bg-slate-800 rounded-lg border p-4">
+              <div className={`bg-white dark:bg-slate-800 rounded-lg border p-4 relative ${isStale ? 'opacity-75' : ''}`}>
                 <p className="text-sm text-muted-foreground">Total Payments</p>
                 <p className="text-2xl font-bold">{summary.total_payments}</p>
               </div>
-              <div className="bg-white dark:bg-slate-800 rounded-lg border p-4">
+              <div className={`bg-white dark:bg-slate-800 rounded-lg border p-4 relative ${isStale ? 'opacity-75' : ''}`}>
                 <p className="text-sm text-muted-foreground">Total Amount</p>
                 <p className="text-2xl font-bold text-green-600">
                   {formatCurrency(summary.total_amount_paid)}
                 </p>
               </div>
-              <div className="bg-white dark:bg-slate-800 rounded-lg border p-4">
+              <div className={`bg-white dark:bg-slate-800 rounded-lg border p-4 relative ${isStale ? 'opacity-75' : ''}`}>
                 <p className="text-sm text-muted-foreground">Mobile Money</p>
                 <p className="text-xl font-bold">
                   {formatCurrency(summary.payment_methods_breakdown.mobile_money)}
                 </p>
               </div>
-              <div className="bg-white dark:bg-slate-800 rounded-lg border p-4">
+              <div className={`bg-white dark:bg-slate-800 rounded-lg border p-4 relative ${isStale ? 'opacity-75' : ''}`}>
                 <p className="text-sm text-muted-foreground">Bank Transfer</p>
                 <p className="text-xl font-bold">
                   {formatCurrency(summary.payment_methods_breakdown.bank_transfer)}
@@ -179,7 +190,12 @@ export default function PaymentHistoryPage() {
           </div>
 
           {/* Payment Table */}
-          <PaymentHistoryTable payments={payments} />
+          <PaymentHistoryTable 
+            payments={payments} 
+            currentPage={currentPage}
+            perPage={15}
+            onStatusUpdate={() => refetch()}
+          />
 
           {/* Pagination Info */}
           <div className="text-sm text-muted-foreground text-center">

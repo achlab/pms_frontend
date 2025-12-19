@@ -324,7 +324,9 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
   };
 
   // Get status badge variant
-  const getStatusBadgeVariant = (status: InvoiceStatus) => {
+  const getStatusBadgeVariant = (status?: InvoiceStatus) => {
+    if (!status) return "secondary";
+    
     switch (status) {
       case "paid":
         return "default";
@@ -340,11 +342,25 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
   };
 
   // Format currency
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount?: number | null) => {
+    if (amount === undefined || amount === null || isNaN(amount)) return '₵0.00';
+    
     return new Intl.NumberFormat('en-GH', {
       style: 'currency',
       currency: 'GHS'
     }).format(amount);
+  };
+
+  // Safely format date
+  const formatDate = (dateString?: string | null) => {
+    if (!dateString) return 'N/A';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid Date';
+      return date.toLocaleDateString();
+    } catch (error) {
+      return 'Invalid Date';
+    }
   };
 
   if (loading) {
@@ -356,16 +372,16 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Invoice Management</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Invoice Management</h1>
+          <p className="text-sm md:text-base text-muted-foreground">
             Manage invoices, payments, and billing for your properties
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -658,7 +674,7 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
                       <p><strong>Due Date:</strong> {bulkGenerationData.due_date}</p>
                       <p><strong>Period:</strong> {bulkGenerationData.period_start} to {bulkGenerationData.period_end}</p>
                       {bulkGenerationData.additional_charges && bulkGenerationData.additional_charges.length > 0 && (
-                        <p key="additional-charges-summary"><strong>Additional Charges:</strong> {bulkGenerationData.additional_charges.length} item(s)</p>
+                        <p><strong>Additional Charges:</strong> {bulkGenerationData.additional_charges.length} item(s)</p>
                       )}
                     </div>
                   </div>
@@ -868,24 +884,41 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
               </div>
             ) : (
               invoices.map((invoice) => (
-                <div key={invoice.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-4">
-                    <div className="flex flex-col">
-                      <div className="font-semibold">{invoice.invoice_number}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {invoice.property.name} - Unit {invoice.unit.unit_number}
+                <div key={invoice.id} className="flex flex-col md:flex-row md:items-center md:justify-between p-4 border rounded-lg gap-4">
+                  <div className="flex flex-col space-y-2 flex-1">
+                    <div className="flex items-start justify-between">
+                      <div className="flex flex-col gap-1">
+                        <div className="font-semibold text-base">{invoice.invoice_number || 'N/A'}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {invoice.property?.name || 'N/A'} - Unit {invoice.unit?.unit_number || 'N/A'}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          Tenant: {invoice.tenant?.name || 'N/A'}
+                        </div>
                       </div>
+                      <Badge variant={getStatusBadgeVariant(invoice.status)} className="md:hidden">
+                        {invoice.status?.replace('_', ' ') || 'Unknown'}
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex flex-col gap-1 md:hidden">
+                      <div className="font-semibold text-lg">{formatCurrency(invoice.total_amount)}</div>
                       <div className="text-sm text-muted-foreground">
-                        Tenant: {invoice.tenant.name}
+                        Due: {formatDate(invoice.due_date)}
                       </div>
+                      {invoice.outstanding_balance > 0 && (
+                        <div className="text-sm text-destructive">
+                          Outstanding: {formatCurrency(invoice.outstanding_balance)}
+                        </div>
+                      )}
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
+                  <div className="hidden md:flex md:items-center md:gap-4">
+                    <div className="text-right min-w-[120px]">
                       <div className="font-semibold">{formatCurrency(invoice.total_amount)}</div>
                       <div className="text-sm text-muted-foreground">
-                        Due: {new Date(invoice.due_date).toLocaleDateString()}
+                        Due: {formatDate(invoice.due_date)}
                       </div>
                       {invoice.outstanding_balance > 0 && (
                         <div className="text-sm text-destructive">
@@ -895,34 +928,35 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
                     </div>
                     
                     <Badge variant={getStatusBadgeVariant(invoice.status)}>
-                      {invoice.status.replace('_', ' ')}
+                      {invoice.status?.replace('_', ' ') || 'Unknown'}
                     </Badge>
+                  </div>
                     
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                      <Button variant="outline" size="sm" title="View Invoice">
                         <FileText className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" title="Download Invoice">
                         <Download className="h-4 w-4" />
                       </Button>
-                      {userRole === "landlord" && invoice.status !== "paid" && (
+                      {userRole === "landlord" && invoice.status && invoice.status !== "paid" && (
                         <>
                           <Button 
                             variant="outline" 
                             size="sm"
                             onClick={() => handleRecordPayment(invoice.id)}
+                            title="Record Payment"
                           >
                             <CreditCard className="h-4 w-4" />
                           </Button>
                           {invoice.status === "pending" && (
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" size="sm" title="Send Invoice">
                               <Send className="h-4 w-4" />
                             </Button>
                           )}
                         </>
                       )}
                     </div>
-                  </div>
                 </div>
               ))
             )}

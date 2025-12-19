@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { MainLayout } from "@/components/main-layout"
-import { useProfile, useProfilePicture } from "@/lib/hooks/use-profile"
+import { useProfile, useUploadProfilePicture, useDeleteProfilePicture } from "@/lib/hooks/use-profile"
 import { useAuth } from "@/contexts/auth-context"
 import { toast } from "@/hooks/use-toast"
 import {
@@ -33,7 +33,8 @@ export default function EditProfilePage() {
   const router = useRouter()
   const { user: currentUser } = useAuth()
   const { updateProfile, loading: updating } = useProfile()
-  const { uploadPicture, deletePicture, uploading, deleting } = useProfilePicture()
+  const { mutateAsync: uploadPicture, isPending: uploading } = useUploadProfilePicture()
+  const { mutateAsync: deletePicture, isPending: deleting } = useDeleteProfilePicture()
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [hasChanges, setHasChanges] = useState(false)

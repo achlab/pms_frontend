@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { useRoleAccess } from "@/lib/hooks/use-role-access"
@@ -29,6 +30,7 @@ import {
   PenTool as Tool,
   User,
   LogOut,
+  Building,
 } from "lucide-react"
 
 const getNavigationForRole = (role: string) => {
@@ -103,8 +105,8 @@ const getNavigationForRole = (role: string) => {
         icon: Home,
       },
       {
-        name: "Profile",
-        href: "/profile",
+        name: "My Profile",
+        href: "/caretaker/profile",
         icon: User,
       },
       {
@@ -213,9 +215,14 @@ const getNavigationForRole = (role: string) => {
       icon: BarChart3,
     },
     {
-      name: "Profile",
-      href: "/profile",
+      name: "My Profile",
+      href: "/landlord/profile",
       icon: User,
+    },
+    {
+      name: "Payment Methods",
+      href: "/payment-methods",
+      icon: DollarSign,
     },
     {
       name: "Settings",
@@ -230,9 +237,31 @@ export function Sidebar() {
   const { user, logout, isLoading } = useAuth()
   const { roleName, canAccessRoute } = useRoleAccess()
   const router = useRouter()
+  const [imageError, setImageError] = useState(false)
 
   const currentUserRole = user?.role || "landlord"
   const navigation = getNavigationForRole(currentUserRole)
+
+  // Create a stable key for image URLs to avoid useEffect dependency issues
+  const imageUrlsKey = useMemo(() => 
+    `${user?.profile_picture_url || ''}|${user?.profile_picture || ''}|${user?.photo_url || ''}`,
+    [user?.profile_picture_url, user?.profile_picture, user?.photo_url]
+  )
+
+  // Reset image error when user image URLs change
+  useEffect(() => {
+    setImageError(false)
+    // Debug user data
+    console.log('Sidebar user data:', {
+      id: user?.id,
+      name: user?.name,
+      role: user?.role,
+      profile_picture_url: user?.profile_picture_url,
+      profile_picture: user?.profile_picture,
+      photo_url: user?.photo_url,
+      hasImage: !!(user?.profile_picture_url || user?.profile_picture || user?.photo_url)
+    });
+  }, [imageUrlsKey])
 
   const handleLogout = async () => {
     try {
@@ -302,11 +331,31 @@ export function Sidebar() {
       {/* User Profile Section */}
       <div className="p-4 border-t border-white/10 space-y-3">
         <div className="flex items-center gap-3 px-3 py-2 min-h-[44px]">
-          <div className="h-8 w-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
-            {user?.avatar ? (
-              <img src={user.avatar || "/placeholder.svg"} alt={user.name} className="h-8 w-8 rounded-full" />
+          <div className="h-8 w-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center overflow-hidden">
+            {(user?.photo_url || user?.profile_picture_url || user?.profile_picture) && !imageError ? (
+              <img 
+                src={user.photo_url || user.profile_picture_url || user.profile_picture} 
+                alt={user.name} 
+                className="h-8 w-8 rounded-full object-cover"
+                onError={(e) => {
+                  const imgSrc = user?.photo_url || user?.profile_picture_url || user?.profile_picture;
+                  console.error('Sidebar image load error:', {
+                    attemptedSrc: imgSrc,
+                    profile_picture_url: user?.profile_picture_url,
+                    profile_picture: user?.profile_picture,
+                    photo_url: user?.photo_url,
+                    userRole: currentUserRole,
+                    userId: user?.id,
+                    targetSrc: (e.target as HTMLImageElement)?.src,
+                    errorEvent: e
+                  });
+                  setImageError(true);
+                }}
+              />
             ) : currentUserRole === "super_admin" ? (
               <Shield className="h-4 w-4 text-white" />
+            ) : currentUserRole === "landlord" ? (
+              <Building className="h-4 w-4 text-white" />
             ) : currentUserRole === "caretaker" ? (
               <Wrench className="h-4 w-4 text-white" />
             ) : currentUserRole === "tenant" ? (

@@ -6,6 +6,7 @@
 "use client";
 
 import { useProfile } from "@/lib/hooks/use-profile";
+import { MainLayout } from "@/components/main-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,74 +32,95 @@ export default function ProfilePage() {
   const router = useRouter();
   const { data, isLoading, error, refetch } = useProfile();
 
-  const profile = data?.data;
+  const profile = data;
+
+  // Get role-specific profile edit route
+  const getEditRoute = () => {
+    if (!profile?.role) return "/settings";
+    
+    switch (profile.role) {
+      case "landlord":
+        return "/landlord/profile";
+      case "caretaker":
+        return "/caretaker/profile";
+      case "tenant":
+        return "/tenant/profile";
+      default:
+        return "/settings";
+    }
+  };
 
   if (isLoading) {
     return (
-      <div className="container mx-auto py-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-10 w-32" />
-        </div>
-        <div className="grid gap-6 md:grid-cols-3">
-          <Skeleton className="h-96" />
-          <div className="md:col-span-2 space-y-6">
-            <Skeleton className="h-64" />
-            <Skeleton className="h-64" />
+      <MainLayout>
+        <div className="container mx-auto py-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <Skeleton className="h-10 w-48" />
+            <Skeleton className="h-10 w-32" />
+          </div>
+          <div className="grid gap-6 md:grid-cols-3">
+            <Skeleton className="h-96" />
+            <div className="md:col-span-2 space-y-6">
+              <Skeleton className="h-64" />
+              <Skeleton className="h-64" />
+            </div>
           </div>
         </div>
-      </div>
+      </MainLayout>
     );
   }
 
   if (error || !profile) {
     return (
-      <div className="container mx-auto py-6">
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Failed to load profile information. Please try again.
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-4"
-              onClick={() => refetch()}
-            >
-              <RefreshCw className="h-3 w-3 mr-2" />
-              Retry
-            </Button>
-          </AlertDescription>
-        </Alert>
-      </div>
+      <MainLayout>
+        <div className="container mx-auto py-6">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Failed to load profile information. Please try again.
+              <Button
+                variant="outline"
+                size="sm"
+                className="ml-4"
+                onClick={() => refetch()}
+              >
+                <RefreshCw className="h-3 w-3 mr-2" />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      </MainLayout>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">My Profile</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your account information and settings
-          </p>
+    <MainLayout>
+      <div className="container mx-auto py-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">My Profile</h1>
+            <p className="text-muted-foreground mt-1">
+              Manage your account information and settings
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => router.push("/settings")}
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Settings
+            </Button>
+            <Button onClick={() => router.push(getEditRoute())}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Profile
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => router.push("/settings")}
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            Settings
-          </Button>
-          <Button onClick={() => router.push("/profile/edit")}>
-            <Edit className="h-4 w-4 mr-2" />
-            Edit Profile
-          </Button>
-        </div>
-      </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-3">
         {/* Profile Card - Sidebar */}
         <Card>
           <CardHeader>
@@ -108,9 +130,9 @@ export default function ProfilePage() {
             {/* Avatar */}
             <div className="flex flex-col items-center">
               <div className="relative">
-                {profile.profile_picture ? (
+                {(profile.photo_url || profile.profile_picture_url || profile.profile_picture) ? (
                   <img
-                    src={profile.profile_picture}
+                    src={profile.photo_url || profile.profile_picture_url || profile.profile_picture}
                     alt={profile.name}
                     className="h-32 w-32 rounded-full object-cover border-4 border-background shadow-lg"
                   />
@@ -288,6 +310,7 @@ export default function ProfilePage() {
           </Card>
         </div>
       </div>
-    </div>
+      </div>
+    </MainLayout>
   );
 }

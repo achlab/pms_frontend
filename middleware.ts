@@ -28,8 +28,8 @@ const PUBLIC_ROUTES = [
 // Role-specific protected route prefixes
 const ROLE_ROUTE_PREFIXES = {
   super_admin: ['/admin'],
-  landlord: ['/landlord', '/properties', '/tenants', '/invoices', '/payments', '/rent-roll', '/reports'],
-  caretaker: ['/caretaker', '/maintenance-requests'],
+  landlord: ['/landlord', '/properties', '/tenants', '/invoices', '/payments', '/payment-methods', '/rent-roll', '/reports'],
+  caretaker: ['/caretaker', '/maintenance-requests', '/my-unit'],
   tenant: ['/tenant', '/my-lease', '/my-unit', '/pay-rent', '/payments-invoices', '/meter-readings'],
 }
 
