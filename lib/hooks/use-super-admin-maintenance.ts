@@ -1,273 +1,132 @@
 /**
- * Super Admin Maintenance Management Hooks
- * React hooks for system-wide maintenance oversight
+ * Super Admin Maintenance Hooks
+ * React hooks for maintenance management across all properties
  */
 
-import { useState, useEffect, useCallback } from "react";
-import { superAdminMaintenanceService } from "../services";
-import type {
-  SystemMaintenanceRequest,
-  SuperAdminMaintenanceQueryParams,
-  MaintenanceStatus,
-  MaintenancePriority,
-  MaintenanceCategory,
-  PaginatedResponse,
-} from "../api-types";
-
-// ============================================
-// MAINTENANCE QUERIES
-// ============================================
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { superAdminMaintenanceService } from "../services/super-admin-maintenance.service";
+import type { 
+  SuperAdminMaintenanceQueryParams, 
+  ApproveRejectData 
+} from "../services/super-admin-maintenance.service";
+import { toast } from "sonner";
 
 /**
  * Hook to fetch all maintenance requests
  */
-export function useSuperAdminMaintenanceRequests(
-  params?: SuperAdminMaintenanceQueryParams
-) {
-  const [data, setData] = useState<PaginatedResponse<SystemMaintenanceRequest> | null>(
-    null
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchRequests = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await superAdminMaintenanceService.getAllMaintenanceRequests(
-        params
-      );
-      setData(response);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch maintenance requests");
-    } finally {
-      setLoading(false);
-    }
-  }, [params]);
-
-  useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]);
-
-  return { data, loading, error, refetch: fetchRequests };
+export function useSuperAdminMaintenanceRequests(params?: SuperAdminMaintenanceQueryParams) {
+  return useQuery({
+    queryKey: ['super-admin-maintenance-requests', params],
+    queryFn: async () => {
+      const response = await superAdminMaintenanceService.getAllMaintenanceRequests(params);
+      return response;
+    },
+  });
 }
 
 /**
  * Hook to fetch a single maintenance request
  */
-export function useSuperAdminMaintenanceRequest(requestId: string | null) {
-  const [data, setData] = useState<SystemMaintenanceRequest | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!requestId) {
-      setLoading(false);
-      return;
-    }
-
-    const fetchRequest = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response =
-          await superAdminMaintenanceService.getMaintenanceRequestDetails(requestId);
-        setData(response.data!);
-      } catch (err: any) {
-        setError(err.message || "Failed to fetch maintenance request");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchRequest();
-  }, [requestId]);
-
-  return { data, loading, error };
+export function useSuperAdminMaintenanceRequest(requestId: string) {
+  return useQuery({
+    queryKey: ['super-admin-maintenance-request', requestId],
+    queryFn: async () => {
+      const response = await superAdminMaintenanceService.getMaintenanceRequest(requestId);
+      return response.data;
+    },
+    enabled: !!requestId,
+  });
 }
 
 /**
- * Hook to fetch maintenance requests by landlord
+ * Hook to fetch maintenance statistics
  */
-export function useSuperAdminMaintenanceByLandlord(landlordId: string) {
-  const [data, setData] = useState<PaginatedResponse<SystemMaintenanceRequest> | null>(
-    null
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function useSuperAdminMaintenanceStatistics() {
+  return useQuery({
+    queryKey: ['super-admin-maintenance-statistics'],
+    queryFn: async () => {
+      const response = await superAdminMaintenanceService.getStatistics();
+      return response.data;
+    },
+  });
+}
 
-  const fetchRequests = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response =
-        await superAdminMaintenanceService.getMaintenanceRequestsByLandlord(landlordId);
-      setData(response);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch maintenance requests");
-    } finally {
-      setLoading(false);
-    }
-  }, [landlordId]);
+/**
+ * Hook to fetch categories
+ */
+export function useSuperAdminMaintenanceCategories() {
+  return useQuery({
+    queryKey: ['super-admin-maintenance-categories'],
+    queryFn: async () => {
+      const response = await superAdminMaintenanceService.getCategories();
+      return response.data;
+    },
+  });
+}
 
-  useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]);
+/**
+ * Hook to fetch caretakers
+ */
+export function useSuperAdminMaintenanceCaretakers() {
+  return useQuery({
+    queryKey: ['super-admin-maintenance-caretakers'],
+    queryFn: async () => {
+      const response = await superAdminMaintenanceService.getCaretakers();
+      return response.data;
+    },
+  });
+}
 
-  return { data, loading, error, refetch: fetchRequests };
+/**
+ * Hook to approve/reject maintenance request
+ */
+export function useApproveRejectMaintenanceRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ requestId, data }: { requestId: string; data: ApproveRejectData }) => 
+      superAdminMaintenanceService.approveRejectRequest(requestId, data),
+    onSuccess: (response, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['super-admin-maintenance-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['super-admin-maintenance-request'] });
+      queryClient.invalidateQueries({ queryKey: ['super-admin-maintenance-statistics'] });
+      
+      const action = variables.data.action === 'approve' ? 'approved' : 'rejected';
+      toast.success(`Maintenance request ${action} successfully`);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to process maintenance request');
+    },
+  });
 }
 
 /**
  * Hook to fetch emergency maintenance requests
  */
 export function useSuperAdminEmergencyRequests() {
-  const [data, setData] = useState<PaginatedResponse<SystemMaintenanceRequest> | null>(
-    null
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchRequests = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await superAdminMaintenanceService.getEmergencyRequests();
-      setData(response);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch emergency requests");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]);
-
-  return { data, loading, error, refetch: fetchRequests };
+  return useQuery({
+    queryKey: ['super-admin-emergency-requests'],
+    queryFn: async () => {
+      const response = await superAdminMaintenanceService.getAllMaintenanceRequests({
+        priority: 'emergency',
+        status: 'received',
+      });
+      return response;
+    },
+  });
 }
 
 /**
- * Hook to fetch open maintenance requests
+ * Hook to fetch open maintenance requests (pending approval)
  */
 export function useSuperAdminOpenRequests() {
-  const [data, setData] = useState<PaginatedResponse<SystemMaintenanceRequest> | null>(
-    null
-  );
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchRequests = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await superAdminMaintenanceService.getOpenRequests();
-      setData(response);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch open requests");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchRequests();
-  }, [fetchRequests]);
-
-  return { data, loading, error, refetch: fetchRequests };
+  return useQuery({
+    queryKey: ['super-admin-open-requests'],
+    queryFn: async () => {
+      const response = await superAdminMaintenanceService.getAllMaintenanceRequests({
+        status: 'received',
+      });
+      return response;
+    },
+  });
 }
-
-// ============================================
-// MAINTENANCE CATEGORIES
-// ============================================
-
-/**
- * Hook to fetch maintenance categories
- */
-export function useSuperAdminMaintenanceCategories() {
-  const [data, setData] = useState<MaintenanceCategory[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await superAdminMaintenanceService.getMaintenanceCategories();
-        setData(response.data || []);
-      } catch (err: any) {
-        setError(err.message || "Failed to fetch categories");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCategories();
-  }, []);
-
-  return { data, loading, error };
-}
-
-// ============================================
-// MAINTENANCE STATISTICS
-// ============================================
-
-/**
- * Hook to fetch maintenance statistics
- */
-export function useSuperAdminMaintenanceStatistics() {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchStatistics = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await superAdminMaintenanceService.getMaintenanceStatistics();
-      setData(response.data);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch statistics");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchStatistics();
-  }, [fetchStatistics]);
-
-  return { data, loading, error, refetch: fetchStatistics };
-}
-
-/**
- * Hook to fetch caretaker performance
- */
-export function useSuperAdminCaretakerPerformance(caretakerId: string) {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchPerformance = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await superAdminMaintenanceService.getCaretakerPerformance(
-          caretakerId
-        );
-        setData(response.data);
-      } catch (err: any) {
-        setError(err.message || "Failed to fetch caretaker performance");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchPerformance();
-  }, [caretakerId]);
-
-  return { data, loading, error };
-}
-

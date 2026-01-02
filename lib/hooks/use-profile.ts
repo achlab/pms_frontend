@@ -75,4 +75,17 @@ export function useCurrentUser() {
   return user;
 }
 
+/**
+ * Hook for changing password
+ */
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (data: {
+      current_password: string;
+      new_password: string;
+      new_password_confirmation: string;
+    }) => profileService.changePassword(data),
+  });
+}
+
 export default useProfile;

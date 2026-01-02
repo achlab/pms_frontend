@@ -1,316 +1,484 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { MainLayout } from "@/components/main-layout"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { AnimatedCard } from "@/components/animated-card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Building2, MapPin, Users, DollarSign, Search, UserCheck, Settings } from "lucide-react"
-import { useAppSelector, useAppDispatch } from "@/lib/hooks"
-import { formatCurrency } from "@/lib/localization"
+} from "@/components/ui/dialog";
+import {
+  Building2,
+  Search,
+  Filter,
+  Eye,
+  Power,
+  Home,
+  Users,
+  MapPin,
+  TrendingUp,
+  TrendingDown,
+  BarChart3,
+} from "lucide-react";
+import {
+  useSuperAdminProperties,
+  useSuperAdminProperty,
+  useSuperAdminPropertyStatistics,
+  useSuperAdminLandlords,
+  useTogglePropertyStatus,
+  useToggleUnitStatus,
+} from "@/lib/hooks/use-super-admin-properties";
+import { formatDate } from "@/lib/utils";
+import { useRouter } from "next/navigation";
 
-export default function AdminPropertiesPage() {
-  const dispatch = useAppDispatch()
-  const { properties } = useAppSelector((state) => state.properties)
-  const { users } = useAppSelector((state) => state.users)
+export default function SuperAdminPropertiesPage() {
+  const router = useRouter();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [landlordFilter, setLandlordFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
 
-  const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [selectedProperty, setSelectedProperty] = useState<any>(null)
+  // Fetch data
+  const { data: propertiesData, isLoading: propertiesLoading } = useSuperAdminProperties({
+    page: currentPage,
+    per_page: 15,
+    search: search || undefined,
+    status: statusFilter !== "all" ? (statusFilter as "active" | "inactive") : undefined,
+    landlord_id: landlordFilter !== "all" ? landlordFilter : undefined,
+  });
 
-  const filteredProperties = properties.filter((property) => {
-    const matchesSearch =
-      searchTerm === "" ||
-      property.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      property.address.toLowerCase().includes(searchTerm.toLowerCase())
+  const { data: statistics, isLoading: statsLoading } = useSuperAdminPropertyStatistics();
+  const { data: landlords } = useSuperAdminLandlords();
+  const { data: selectedProperty } = useSuperAdminProperty(selectedPropertyId || "");
 
-    const matchesStatus = statusFilter === "all" || property.status === statusFilter
+  const togglePropertyStatus = useTogglePropertyStatus();
+  const toggleUnitStatus = useToggleUnitStatus();
 
-    return matchesSearch && matchesStatus
-  })
+  const properties = propertiesData?.data || [];
+  const meta = propertiesData?.meta;
 
-  const totalProperties = properties.length
-  const activeProperties = properties.filter((p) => p.status === "Active").length
-  const totalRevenue = properties.reduce((sum, p) => sum + p.monthlyRevenue, 0)
-  const totalUnits = properties.reduce((sum, p) => sum + p.units, 0)
+  const handleToggleProperty = async (propertyId: string) => {
+    try {
+      await togglePropertyStatus.mutateAsync(propertyId);
+    } catch (error) {
+      console.error("Error toggling property:", error);
+    }
+  };
 
-  const getPropertyOwner = (propertyId: number) => {
-    // In real app, properties would have ownerId field
-    const landlords = users.filter((u) => u.role === "landlord")
-    return landlords[propertyId % landlords.length] || { name: "Unassigned", email: "" }
-  }
+  const handleToggleUnit = async (unitId: string) => {
+    try {
+      await toggleUnitStatus.mutateAsync(unitId);
+    } catch (error) {
+      console.error("Error toggling unit:", error);
+    }
+  };
+
+  const getStatusBadge = (isActive: boolean) => {
+    return isActive ? (
+      <Badge className="bg-green-500">{" Active"}</Badge>
+    ) : (
+      <Badge variant="destructive">Inactive</Badge>
+    );
+  };
 
   return (
-    <MainLayout>
-      <div className="p-8 space-y-8">
-        {/* Header */}
-        <div className="flex justify-between items-start animate-in fade-in-0 slide-in-from-top-4 duration-500">
-          <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-cyan-500 bg-clip-text text-transparent">
-              Property Oversight
-            </h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-2">
-              Monitor all properties across the platform and manage landlord assignments.
-            </p>
-          </div>
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <AnimatedCard delay={100} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Properties</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalProperties}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-500">{activeProperties} active</p>
+      <div className="container mx-auto py-6 space-y-6">
+        {/* Hero Header */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-700 dark:from-cyan-900 dark:via-blue-900 dark:to-indigo-900 shadow-2xl">
+          <div className="absolute inset-0 bg-black/10"></div>
+          <div className="absolute top-0 right-0 w-96 h-96 bg-white/5 rounded-full blur-3xl"></div>
+          
+          <div className="relative z-10 px-8 py-12 md:px-12">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <Building2 className="h-10 w-10 text-white" />
+                  <Badge className="bg-white/20 text-white border-white/30">
+                    Property Management
+                  </Badge>
                 </div>
-                <div className="h-12 w-12 bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900 dark:to-indigo-900 rounded-lg flex items-center justify-center">
-                  <Building2 className="h-6 w-6 text-blue-600 dark:text-blue-400" />
-                </div>
+                
+                <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+                  All Properties
+                </h1>
+                
+                <p className="text-cyan-100 text-lg max-w-2xl">
+                  Manage all properties across the platform. View landlords, caretakers, 
+                  units, and enable/disable properties as needed.
+                </p>
               </div>
-            </CardContent>
-          </AnimatedCard>
-
-          <AnimatedCard delay={200} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Units</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalUnits}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-500">Across all properties</p>
-                </div>
-                <div className="h-12 w-12 bg-gradient-to-br from-green-100 to-emerald-100 dark:from-green-900 dark:to-emerald-900 rounded-lg flex items-center justify-center">
-                  <Users className="h-6 w-6 text-green-600 dark:text-green-400" />
-                </div>
-              </div>
-            </CardContent>
-          </AnimatedCard>
-
-          <AnimatedCard delay={300} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Revenue</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{formatCurrency(totalRevenue)}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-500">Monthly across platform</p>
-                </div>
-                <div className="h-12 w-12 bg-gradient-to-br from-emerald-100 to-cyan-100 dark:from-emerald-900 dark:to-cyan-900 rounded-lg flex items-center justify-center">
-                  <DollarSign className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
-                </div>
-              </div>
-            </CardContent>
-          </AnimatedCard>
-
-          <AnimatedCard delay={400} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Occupancy Rate</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {Math.round((properties.reduce((sum, p) => sum + p.occupied, 0) / totalUnits) * 100)}%
-                  </p>
-                  <p className="text-sm text-gray-500 dark:text-gray-500">Platform average</p>
-                </div>
-                <div className="h-12 w-12 bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900 dark:to-pink-900 rounded-lg flex items-center justify-center">
-                  <UserCheck className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                </div>
-              </div>
-            </CardContent>
-          </AnimatedCard>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between animate-in fade-in-0 slide-in-from-bottom-4 duration-500 delay-300">
-          <div className="flex gap-4 flex-1 max-w-2xl">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search properties by name or address..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 border-gray-200 dark:border-gray-700"
-              />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[140px] border-gray-200 dark:border-gray-700">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Active">Active</SelectItem>
-                <SelectItem value="Maintenance">Maintenance</SelectItem>
-                <SelectItem value="Vacant">Vacant</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
+
+        {/* Statistics Cards */}
+        {!statsLoading && statistics && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Properties</p>
+                    <p className="text-3xl font-bold">{statistics.total_properties}</p>
+                    <p className="text-xs text-green-600 mt-1">
+                      {statistics.active_properties} active
+                    </p>
+                  </div>
+                  <Building2 className="h-12 w-12 text-blue-500 opacity-20" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Units</p>
+                    <p className="text-3xl font-bold">{statistics.total_units}</p>
+                    <p className="text-xs text-blue-600 mt-1">
+                      {statistics.active_units} active
+                    </p>
+                  </div>
+                  <Home className="h-12 w-12 text-green-500 opacity-20" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Occupancy</p>
+                    <p className="text-3xl font-bold">
+                      {statistics.total_units > 0
+                        ? Math.round((statistics.occupied_units / statistics.total_units) * 100)
+                        : 0}%
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {statistics.occupied_units}/{statistics.total_units} occupied
+                    </p>
+                  </div>
+                  <TrendingUp className="h-12 w-12 text-purple-500 opacity-20" />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Vacant Units</p>
+                    <p className="text-3xl font-bold">{statistics.vacant_units}</p>
+                    <p className="text-xs text-orange-600 mt-1">
+                      Available for lease
+                    </p>
+                  </div>
+                  <TrendingDown className="h-12 w-12 text-orange-500 opacity-20" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Filters and Search */}
+        <Card>
+          <CardContent className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="relative md:col-span-2">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search properties by name, address, or city..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Filter by status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="active">Active Only</SelectItem>
+                  <SelectItem value="inactive">Inactive Only</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={landlordFilter} onValueChange={setLandlordFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Filter by landlord" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Landlords</SelectItem>
+                  {landlords?.map((landlord) => (
+                    <SelectItem key={landlord.id} value={landlord.id}>
+                      {landlord.name} ({landlord.properties_count})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Properties Table */}
-        <AnimatedCard delay={500} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+        <Card>
           <CardHeader>
-            <CardTitle className="text-gray-900 dark:text-white">Property Directory</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Properties List
+              {meta && (
+                <Badge variant="outline" className="ml-auto">
+                  {meta.total} total
+                </Badge>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow className="border-gray-200 dark:border-gray-700">
-                  <TableHead>Property</TableHead>
-                  <TableHead>Owner</TableHead>
-                  <TableHead>Units</TableHead>
-                  <TableHead>Occupancy</TableHead>
-                  <TableHead>Revenue</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredProperties.map((property) => {
-                  const owner = getPropertyOwner(property.id)
-                  const occupancyRate = Math.round((property.occupied / property.units) * 100)
-
-                  return (
-                    <TableRow key={property.id} className="border-gray-200 dark:border-gray-700">
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-indigo-100 to-cyan-100 dark:from-indigo-900 dark:to-cyan-900 flex items-center justify-center">
-                            <Building2 className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
-                          </div>
+            {propertiesLoading ? (
+              <div className="space-y-3">
+                {[...Array(5)].map((_, i) => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : properties.length === 0 ? (
+              <div className="text-center py-12">
+                <Building2 className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                <p className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
+                  No properties found
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Try adjusting your filters or search terms
+                </p>
+              </div>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Property</TableHead>
+                      <TableHead>Landlord</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Units</TableHead>
+                      <TableHead>Occupancy</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {properties.map((property: any) => (
+                      <TableRow key={property.id}>
+                        <TableCell>
                           <div>
-                            <p className="font-medium text-gray-900 dark:text-white">{property.name}</p>
-                            <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+                            <p className="font-medium">{property.name}</p>
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
                               <MapPin className="h-3 w-3" />
-                              {property.address}
-                            </div>
+                              {property.city}, {property.state}
+                            </p>
                           </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">{owner.name}</p>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">{owner.email}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-center">
-                          <p className="font-semibold text-gray-900 dark:text-white">{property.units}</p>
-                          <p className="text-sm text-gray-500 dark:text-gray-500">total</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-center">
-                          <p className="font-semibold text-gray-900 dark:text-white">{occupancyRate}%</p>
-                          <p className="text-sm text-gray-500 dark:text-gray-500">
-                            {property.occupied}/{property.units}
+                        </TableCell>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{property.landlord.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {property.landlord.email}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{property.property_type}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          <p className="font-medium">{property.units_count}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {property.occupied_units_count} occupied
                           </p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="font-semibold">{formatCurrency(property.monthlyRevenue)}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={property.status === "Active" ? "default" : "secondary"}
-                          className={
-                            property.status === "Active"
-                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                              : property.status === "Maintenance"
-                                ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
-                                : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                          }
-                        >
-                          {property.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Dialog>
-                            <DialogTrigger asChild>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-blue-500"
+                                  style={{
+                                    width: `${property.units_count > 0
+                                      ? (property.occupied_units_count / property.units_count) * 100
+                                      : 0}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <span className="text-xs font-medium">
+                              {property.units_count > 0
+                                ? Math.round((property.occupied_units_count / property.units_count) * 100)
+                                : 0}%
+                            </span>
+                          </div>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(property.is_active)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setSelectedPropertyId(property.id)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={property.is_active ? "destructive" : "default"}
+                              onClick={() => handleToggleProperty(property.id)}
+                              disabled={togglePropertyStatus.isPending}
+                            >
+                              <Power className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+
+                {/* Pagination */}
+                {meta && meta.last_page > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <p className="text-sm text-muted-foreground">
+                      Page {meta.current_page} of {meta.last_page}
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        disabled={meta.current_page === 1}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCurrentPage((p) => Math.min(meta.last_page, p + 1))}
+                        disabled={meta.current_page === meta.last_page}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Property Details Modal */}
+        <Dialog open={!!selectedPropertyId} onOpenChange={(open) => !open && setSelectedPropertyId(null)}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Property Details
+              </DialogTitle>
+              <DialogDescription>
+                View and manage units for this property
+              </DialogDescription>
+            </DialogHeader>
+
+            {selectedProperty && (
+              <div className="space-y-6">
+                {/* Property Info */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Property Name</p>
+                    <p className="font-medium">{selectedProperty.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Type</p>
+                    <p className="font-medium">{selectedProperty.property_type}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Landlord</p>
+                    <p className="font-medium">{selectedProperty.landlord.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Caretaker</p>
+                    <p className="font-medium">
+                      {selectedProperty.caretaker?.name || "Not assigned"}
+                    </p>
+                  </div>
+                  <div className="col-span-2">
+                    <p className="text-sm text-muted-foreground">Address</p>
+                    <p className="font-medium">{selectedProperty.address}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedProperty.city}, {selectedProperty.state} {selectedProperty.postal_code}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Units */}
+                <div>
+                  <h3 className="font-medium mb-4">Units ({selectedProperty.units?.length || 0})</h3>
+                  <div className="space-y-2">
+                    {selectedProperty.units?.map((unit: any) => (
+                      <Card key={unit.id}>
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <p className="font-medium">Unit {unit.unit_number}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {unit.number_of_bedrooms} bed, {unit.number_of_bathrooms} bath
+                                {unit.tenant && ` • Tenant: ${unit.tenant.name}`}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {unit.is_occupied ? (
+                                <Badge className="bg-blue-500">Occupied</Badge>
+                              ) : (
+                                <Badge variant="outline">Vacant</Badge>
+                              )}
+                              {getStatusBadge(unit.is_active)}
                               <Button
                                 size="sm"
-                                variant="outline"
-                                onClick={() => setSelectedProperty(property)}
-                                className="min-h-[36px]"
+                                variant={unit.is_active ? "destructive" : "default"}
+                                onClick={() => handleToggleUnit(unit.id)}
+                                disabled={toggleUnitStatus.isPending}
                               >
-                                View Details
+                                <Power className="h-4 w-4" />
                               </Button>
-                            </DialogTrigger>
-                            <DialogContent>
-                              <DialogHeader>
-                                <DialogTitle>Property Details</DialogTitle>
-                                <DialogDescription>Complete information for {property.name}</DialogDescription>
-                              </DialogHeader>
-                              <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div>
-                                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                                      Property Name
-                                    </label>
-                                    <p className="text-gray-900 dark:text-white">{property.name}</p>
-                                  </div>
-                                  <div>
-                                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">Type</label>
-                                    <p className="text-gray-900 dark:text-white">{property.type}</p>
-                                  </div>
-                                  <div className="col-span-2">
-                                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                                      Address
-                                    </label>
-                                    <p className="text-gray-900 dark:text-white">{property.address}</p>
-                                  </div>
-                                  <div>
-                                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                                      Total Units
-                                    </label>
-                                    <p className="text-gray-900 dark:text-white">{property.units}</p>
-                                  </div>
-                                  <div>
-                                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                                      Occupied Units
-                                    </label>
-                                    <p className="text-gray-900 dark:text-white">{property.occupied}</p>
-                                  </div>
-                                  <div>
-                                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                                      Monthly Revenue
-                                    </label>
-                                    <p className="text-gray-900 dark:text-white">
-                                      {formatCurrency(property.monthlyRevenue)}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <label className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                                      Status
-                                    </label>
-                                    <p className="text-gray-900 dark:text-white">{property.status}</p>
-                                  </div>
-                                </div>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                          <Button size="sm" variant="outline" className="min-h-[36px] min-w-[36px] bg-transparent">
-                            <Settings className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </AnimatedCard>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
-    </MainLayout>
-  )
+  );
 }

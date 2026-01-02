@@ -42,35 +42,35 @@ class CaretakerPropertyService {
 
   /**
    * Get all properties assigned to the caretaker
-   * Returns only properties where the caretaker is assigned
-   * 
+   * Returns only properties where the caretaker is assigned (via units)
+   *
    * @returns List of assigned properties
    */
   async getProperties(): Promise<ApiResponse<CaretakerProperty[]>> {
-    return apiClient.get<ApiResponse<CaretakerProperty[]>>("/properties");
+    return apiClient.get<ApiResponse<CaretakerProperty[]>>("caretaker/properties");
   }
 
   /**
    * Get detailed information about a specific property
-   * 
+   *
    * @param propertyId - UUID of the property
    * @returns Property details
    */
   async getProperty(propertyId: string): Promise<ApiResponse<CaretakerProperty>> {
     return apiClient.get<ApiResponse<CaretakerProperty>>(
-      `/properties/${propertyId}`
+      `caretaker/properties/${propertyId}`
     );
   }
 
   /**
    * Get all units in a specific property
-   * 
+   *
    * @param propertyId - UUID of the property
    * @returns List of units in the property
    */
   async getPropertyUnits(propertyId: string): Promise<ApiResponse<CaretakerUnit[]>> {
     return apiClient.get<ApiResponse<CaretakerUnit[]>>(
-      `/properties/${propertyId}/units`
+      `caretaker/properties/${propertyId}/units`
     );
   }
 
@@ -81,25 +81,25 @@ class CaretakerPropertyService {
   /**
    * Get all units assigned to the caretaker
    * Supports filtering by property, occupancy status, etc.
-   * 
+   *
    * @param params - Query parameters for filtering and pagination
    * @returns Paginated list of units
    */
   async getUnits(
     params?: UnitQueryParams
   ): Promise<PaginatedResponse<CaretakerUnit>> {
-    const url = buildUrl("/units", params);
+    const url = buildUrl("caretaker/units", params);
     return apiClient.get<PaginatedResponse<CaretakerUnit>>(url);
   }
 
   /**
    * Get detailed information about a specific unit
-   * 
+   *
    * @param unitId - UUID of the unit
    * @returns Unit details
    */
   async getUnit(unitId: string): Promise<ApiResponse<CaretakerUnit>> {
-    return apiClient.get<ApiResponse<CaretakerUnit>>(`/units/${unitId}`);
+    return apiClient.get<ApiResponse<CaretakerUnit>>(`caretaker/units/${unitId}`);
   }
 
   // ============================================

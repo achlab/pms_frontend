@@ -5,8 +5,8 @@
 
 export const config = {
   api: {
-    // Try 127.0.0.1 instead of localhost (sometimes fixes network issues)
-    baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000/api",
+    // Laravel backend running on port 8000
+    baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/",
     timeout: Number(process.env.NEXT_PUBLIC_API_TIMEOUT) || 30000,
   },
   app: {

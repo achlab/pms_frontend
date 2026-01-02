@@ -154,24 +154,19 @@ export function MaintenanceRequestCard({
 
         {/* Actions */}
         <div className="space-y-2">
-          {/* Debug Info - Temporary */}
-          {/* Debug: Show conditions for Review button */}
-          {user?.role === 'landlord' && (
-            <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
-              <strong>Review Button Debug:</strong><br/>
-              User Role: {user?.role} (landlord: {user?.role === 'landlord' ? 'YES' : 'NO'})<br/>
-              User ID: {user?.id}<br/>
-              Request Landlord ID: {request.landlord_id || 'NULL'}<br/>
-              Property Landlord ID: {request.property?.landlord_id || 'NULL'}<br/>
-              Status: {request.status}<br/>
-              Is Owner: {(request.landlord_id === user?.id || request.property?.landlord_id === user?.id) ? 'YES' : 'NO'}<br/>
-              Can Review: {!['closed', 'cancelled'].includes(request.status) ? 'YES' : 'NO'}<br/>
-              Should Show: {(user?.role === 'landlord' && (request.landlord_id === user?.id || request.property?.landlord_id === user?.id) && !['closed', 'cancelled'].includes(request.status)) ? 'YES ✅' : 'NO ❌'}
-            </div>
-          )}
-
           {/* Action buttons */}
           <div className="flex gap-2">
+            {/* View Details button - always visible */}
+            {onViewDetails && (
+              <Button
+                size="sm"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                onClick={() => onViewDetails(request.id)}
+              >
+                View Details
+              </Button>
+            )}
+
             {/* Approval/Rejection button for landlords */}
             {(() => {
               const isLandlord = user?.role === 'landlord';
@@ -194,7 +189,7 @@ export function MaintenanceRequestCard({
                 }}
               >
                 <CheckCircle className="h-4 w-4 mr-1" />
-                Review Request
+                Review
               </Button>
             )}
 

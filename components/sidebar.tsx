@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { useState, useEffect, useRef, useMemo } from "react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/contexts/auth-context"
 import { useRoleAccess } from "@/lib/hooks/use-role-access"
@@ -30,7 +29,6 @@ import {
   PenTool as Tool,
   User,
   LogOut,
-  Building,
 } from "lucide-react"
 
 const getNavigationForRole = (role: string) => {
@@ -58,6 +56,26 @@ const getNavigationForRole = (role: string) => {
         name: "Properties",
         href: "/admin/properties",
         icon: Building2,
+      },
+      {
+        name: "Tenants",
+        href: "/admin/tenants",
+        icon: Users,
+      },
+      {
+        name: "Invoices",
+        href: "/admin/invoices",
+        icon: FileText,
+      },
+      {
+        name: "Payments",
+        href: "/admin/payments",
+        icon: CreditCard,
+      },
+      {
+        name: "Maintenance",
+        href: "/admin/maintenance",
+        icon: Wrench,
       },
       {
         name: "Disputes",
@@ -105,8 +123,8 @@ const getNavigationForRole = (role: string) => {
         icon: Home,
       },
       {
-        name: "My Profile",
-        href: "/caretaker/profile",
+        name: "Profile",
+        href: "/profile",
         icon: User,
       },
       {
@@ -151,7 +169,7 @@ const getNavigationForRole = (role: string) => {
       },
       {
         name: "My Requests",
-        href: "/maintenance-requests",
+        href: "/maintenance",
         icon: Tool,
       },
       {
@@ -181,48 +199,48 @@ const getNavigationForRole = (role: string) => {
     },
     {
       name: "Properties",
-      href: "/properties",
+      href: "/landlord/properties",
       icon: Building2,
     },
     {
+      name: "Units",
+      href: "/landlord/units",
+      icon: Home,
+    },
+    {
       name: "Tenants",
-      href: "/tenants",
+      href: "/landlord/tenants",
       icon: UserCheck,
     },
     {
       name: "Invoices",
-      href: "/invoices",
+      href: "/landlord/invoices",
       icon: FileText,
     },
     {
       name: "Payments",
-      href: "/payments",
+      href: "/landlord/payments",
       icon: CreditCard,
     },
     {
       name: "Rent Roll",
-      href: "/rent-roll",
+      href: "/landlord/rent-roll",
       icon: Users,
     },
     {
       name: "Maintenance",
-      href: "/maintenance",
+      href: "/landlord/maintenance",
       icon: Wrench,
     },
     {
       name: "Reports",
-      href: "/reports",
+      href: "/landlord/reports",
       icon: BarChart3,
     },
     {
-      name: "My Profile",
+      name: "Profile",
       href: "/landlord/profile",
       icon: User,
-    },
-    {
-      name: "Payment Methods",
-      href: "/payment-methods",
-      icon: DollarSign,
     },
     {
       name: "Settings",
@@ -237,31 +255,9 @@ export function Sidebar() {
   const { user, logout, isLoading } = useAuth()
   const { roleName, canAccessRoute } = useRoleAccess()
   const router = useRouter()
-  const [imageError, setImageError] = useState(false)
 
   const currentUserRole = user?.role || "landlord"
   const navigation = getNavigationForRole(currentUserRole)
-
-  // Create a stable key for image URLs to avoid useEffect dependency issues
-  const imageUrlsKey = useMemo(() => 
-    `${user?.profile_picture_url || ''}|${user?.profile_picture || ''}|${user?.photo_url || ''}`,
-    [user?.profile_picture_url, user?.profile_picture, user?.photo_url]
-  )
-
-  // Reset image error when user image URLs change
-  useEffect(() => {
-    setImageError(false)
-    // Debug user data
-    console.log('Sidebar user data:', {
-      id: user?.id,
-      name: user?.name,
-      role: user?.role,
-      profile_picture_url: user?.profile_picture_url,
-      profile_picture: user?.profile_picture,
-      photo_url: user?.photo_url,
-      hasImage: !!(user?.profile_picture_url || user?.profile_picture || user?.photo_url)
-    });
-  }, [imageUrlsKey])
 
   const handleLogout = async () => {
     try {
@@ -331,31 +327,15 @@ export function Sidebar() {
       {/* User Profile Section */}
       <div className="p-4 border-t border-white/10 space-y-3">
         <div className="flex items-center gap-3 px-3 py-2 min-h-[44px]">
-          <div className="h-8 w-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center overflow-hidden">
-            {(user?.photo_url || user?.profile_picture_url || user?.profile_picture) && !imageError ? (
+          <div className="h-8 w-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+            {user?.avatar ? (
               <img 
-                src={user.photo_url || user.profile_picture_url || user.profile_picture} 
+                src={user.avatar.startsWith('http') ? user.avatar : `http://localhost:8000/storage/${user.avatar}`} 
                 alt={user.name} 
-                className="h-8 w-8 rounded-full object-cover"
-                onError={(e) => {
-                  const imgSrc = user?.photo_url || user?.profile_picture_url || user?.profile_picture;
-                  console.error('Sidebar image load error:', {
-                    attemptedSrc: imgSrc,
-                    profile_picture_url: user?.profile_picture_url,
-                    profile_picture: user?.profile_picture,
-                    photo_url: user?.photo_url,
-                    userRole: currentUserRole,
-                    userId: user?.id,
-                    targetSrc: (e.target as HTMLImageElement)?.src,
-                    errorEvent: e
-                  });
-                  setImageError(true);
-                }}
+                className="h-8 w-8 rounded-full object-cover" 
               />
             ) : currentUserRole === "super_admin" ? (
               <Shield className="h-4 w-4 text-white" />
-            ) : currentUserRole === "landlord" ? (
-              <Building className="h-4 w-4 text-white" />
             ) : currentUserRole === "caretaker" ? (
               <Wrench className="h-4 w-4 text-white" />
             ) : currentUserRole === "tenant" ? (

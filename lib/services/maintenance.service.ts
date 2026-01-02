@@ -88,6 +88,50 @@ class MaintenanceService {
   }
 
   /**
+   * Mark maintenance request as resolved/unresolved (Tenant only)
+   */
+  async markResolution(
+    requestId: string,
+    isResolved: boolean,
+    resolutionNote?: string,
+    photos?: File[]
+  ): Promise<ApiResponse<MaintenanceRequest>> {
+    // If no photos, send as regular JSON
+    if (!photos || photos.length === 0) {
+      return apiClient.patch<ApiResponse<MaintenanceRequest>>(
+        `/maintenance/requests/${requestId}/mark-resolution`,
+        {
+          is_resolved: isResolved,
+          resolution_note: resolutionNote
+        }
+      );
+    }
+    
+    // If photos are present, use FormData
+    const formData = new FormData();
+    formData.append('is_resolved', isResolved ? '1' : '0');
+    
+    if (resolutionNote) {
+      formData.append('resolution_note', resolutionNote);
+    }
+    
+    // Append all photos
+    photos.forEach((photo, index) => {
+      formData.append('photos[]', photo);
+    });
+    
+    return apiClient.post<ApiResponse<MaintenanceRequest>>(
+      `/maintenance/requests/${requestId}/mark-resolution?_method=PATCH`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+  }
+
+  /**
    * Get maintenance statistics
    */
   async getStatistics(): Promise<ApiResponse<MaintenanceStatistics>> {

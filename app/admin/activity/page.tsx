@@ -1,6 +1,5 @@
 "use client"
 
-import { MainLayout } from "@/components/main-layout"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -219,9 +218,8 @@ export default function AdminActivityPage() {
   }
 
   return (
-    <MainLayout>
-      <div className="p-8 space-y-8">
-        {/* Header */}
+    <div className="p-8 space-y-8">
+      {/* Header */}
         <div className="flex justify-between items-start animate-in fade-in-0 slide-in-from-top-4 duration-500">
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-cyan-500 bg-clip-text text-transparent">
@@ -415,7 +413,6 @@ export default function AdminActivityPage() {
             ))}
           </CardContent>
         </AnimatedCard>
-      </div>
-    </MainLayout>
+    </div>
   )
 }

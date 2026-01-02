@@ -1,226 +1,214 @@
 /**
- * Super Admin Property Management Hooks
- * React hooks for system-wide property oversight
+ * Super Admin Properties Hooks
+ * React hooks for property management across all landlords
  */
 
-import { useState, useEffect, useCallback } from "react";
-import { superAdminPropertyService } from "../services";
-import type {
-  SystemProperty,
-  SuperAdminPropertyQueryParams,
-  PaginatedResponse,
-} from "../api-types";
-
-// ============================================
-// PROPERTY QUERIES
-// ============================================
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { superAdminPropertiesService } from "../services/super-admin-properties.service";
+import type { 
+  SuperAdminPropertiesQueryParams,
+  CreatePropertyRequest,
+  CreateUnitRequest
+} from "../services/super-admin-properties.service";
+import { toast } from "sonner";
 
 /**
  * Hook to fetch all properties
  */
-export function useSuperAdminProperties(params?: SuperAdminPropertyQueryParams) {
-  const [data, setData] = useState<PaginatedResponse<SystemProperty> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchProperties = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await superAdminPropertyService.getAllProperties(params);
-      setData(response);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch properties");
-    } finally {
-      setLoading(false);
-    }
-  }, [params]);
-
-  useEffect(() => {
-    fetchProperties();
-  }, [fetchProperties]);
-
-  return { data, loading, error, refetch: fetchProperties };
+export function useSuperAdminProperties(params?: SuperAdminPropertiesQueryParams) {
+  return useQuery({
+    queryKey: ['super-admin-properties', params],
+    queryFn: async () => {
+      const response = await superAdminPropertiesService.getAllProperties(params);
+      return response;
+    },
+  });
 }
 
 /**
  * Hook to fetch a single property
  */
-export function useSuperAdminProperty(propertyId: string | null) {
-  const [data, setData] = useState<SystemProperty | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!propertyId) {
-      setLoading(false);
-      return;
-    }
-
-    const fetchProperty = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await superAdminPropertyService.getPropertyDetails(propertyId);
-        setData(response.data!);
-      } catch (err: any) {
-        setError(err.message || "Failed to fetch property");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProperty();
-  }, [propertyId]);
-
-  return { data, loading, error };
+export function useSuperAdminProperty(propertyId: string) {
+  return useQuery({
+    queryKey: ['super-admin-property', propertyId],
+    queryFn: async () => {
+      const response = await superAdminPropertiesService.getProperty(propertyId);
+      return response.data;
+    },
+    enabled: !!propertyId,
+  });
 }
-
-/**
- * Hook to fetch properties by landlord
- */
-export function useSuperAdminPropertiesByLandlord(landlordId: string) {
-  const [data, setData] = useState<PaginatedResponse<SystemProperty> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchProperties = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await superAdminPropertyService.getPropertiesByLandlord(landlordId);
-      setData(response);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch properties");
-    } finally {
-      setLoading(false);
-    }
-  }, [landlordId]);
-
-  useEffect(() => {
-    fetchProperties();
-  }, [fetchProperties]);
-
-  return { data, loading, error, refetch: fetchProperties };
-}
-
-/**
- * Hook to fetch active properties
- */
-export function useSuperAdminActiveProperties() {
-  const [data, setData] = useState<PaginatedResponse<SystemProperty> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchProperties = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await superAdminPropertyService.getActiveProperties();
-      setData(response);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch active properties");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchProperties();
-  }, [fetchProperties]);
-
-  return { data, loading, error, refetch: fetchProperties };
-}
-
-// ============================================
-// PROPERTY STATISTICS
-// ============================================
 
 /**
  * Hook to fetch property statistics
  */
 export function useSuperAdminPropertyStatistics() {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchStatistics = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await superAdminPropertyService.getPropertyStatistics();
-      setData(response.data);
-    } catch (err: any) {
-      setError(err.message || "Failed to fetch statistics");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchStatistics();
-  }, [fetchStatistics]);
-
-  return { data, loading, error, refetch: fetchStatistics };
+  return useQuery({
+    queryKey: ['super-admin-property-statistics'],
+    queryFn: async () => {
+      const response = await superAdminPropertiesService.getStatistics();
+      return response.data;
+    },
+  });
 }
 
 /**
- * Hook to fetch landlord property statistics
+ * Hook to fetch all landlords
  */
-export function useSuperAdminLandlordPropertyStats(landlordId: string) {
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await superAdminPropertyService.getLandlordPropertyStatistics(
-          landlordId
-        );
-        setData(response.data);
-      } catch (err: any) {
-        setError(err.message || "Failed to fetch landlord statistics");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchStats();
-  }, [landlordId]);
-
-  return { data, loading, error };
+export function useSuperAdminLandlords() {
+  return useQuery({
+    queryKey: ['super-admin-landlords'],
+    queryFn: async () => {
+      const response = await superAdminPropertiesService.getLandlords();
+      return response.data;
+    },
+  });
 }
 
 /**
- * Hook to fetch top performing properties
+ * Hook to toggle property status
  */
-export function useSuperAdminTopProperties(limit: number = 10) {
-  const [data, setData] = useState<SystemProperty[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function useTogglePropertyStatus() {
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const fetchTopProperties = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await superAdminPropertyService.getTopPerformingProperties(
-          limit
-        );
-        setData(response.data || []);
-      } catch (err: any) {
-        setError(err.message || "Failed to fetch top properties");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTopProperties();
-  }, [limit]);
-
-  return { data, loading, error };
+  return useMutation({
+    mutationFn: (propertyId: string) => 
+      superAdminPropertiesService.togglePropertyStatus(propertyId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['super-admin-properties'] });
+      queryClient.invalidateQueries({ queryKey: ['super-admin-property-statistics'] });
+      toast.success('Property status updated successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update property status');
+    },
+  });
 }
 
+/**
+ * Hook to toggle unit status
+ */
+export function useToggleUnitStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (unitId: string) => 
+      superAdminPropertiesService.toggleUnitStatus(unitId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['super-admin-properties'] });
+      queryClient.invalidateQueries({ queryKey: ['super-admin-property'] });
+      queryClient.invalidateQueries({ queryKey: ['super-admin-property-statistics'] });
+      toast.success('Unit status updated successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update unit status');
+    },
+  });
+}
+
+/**
+ * Hook to create a new property
+ */
+export function useCreateProperty() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: CreatePropertyRequest) => 
+      superAdminPropertiesService.createProperty(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['super-admin-properties'] });
+      queryClient.invalidateQueries({ queryKey: ['super-admin-property-statistics'] });
+      toast.success('Property created successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to create property');
+    },
+  });
+}
+
+/**
+ * Hook to create a new unit
+ */
+export function useCreateUnit() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: CreateUnitRequest) => 
+      superAdminPropertiesService.createUnit(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['super-admin-properties'] });
+      queryClient.invalidateQueries({ queryKey: ['super-admin-property'] });
+      queryClient.invalidateQueries({ queryKey: ['super-admin-property-statistics'] });
+      toast.success('Unit created successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to create unit');
+    },
+  });
+}
+
+/**
+ * Hook to fetch properties list (for unit creation)
+ */
+export function useSuperAdminPropertiesList() {
+  return useQuery({
+    queryKey: ['super-admin-properties-list'],
+    queryFn: async () => {
+      const response = await superAdminPropertiesService.getPropertiesList();
+      return response.data;
+    },
+  });
+}
+
+/**
+ * Hook to fetch caretakers (for assignment)
+ */
+export function useSuperAdminCaretakers() {
+  return useQuery({
+    queryKey: ['super-admin-caretakers'],
+    queryFn: async () => {
+      const response = await superAdminPropertiesService.getCaretakers();
+      return response.data;
+    },
+  });
+}
+
+/**
+ * Hook to assign caretaker to a property
+ */
+export function useAssignCaretaker() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ propertyId, caretakerId }: { propertyId: string; caretakerId: string }) => 
+      superAdminPropertiesService.assignCaretaker(propertyId, caretakerId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['super-admin-properties'] });
+      queryClient.invalidateQueries({ queryKey: ['super-admin-property'] });
+      toast.success('Caretaker assigned successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to assign caretaker');
+    },
+  });
+}
+
+/**
+ * Hook to remove caretaker from a property
+ */
+export function useRemoveCaretaker() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (propertyId: string) => 
+      superAdminPropertiesService.removeCaretaker(propertyId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['super-admin-properties'] });
+      queryClient.invalidateQueries({ queryKey: ['super-admin-property'] });
+      toast.success('Caretaker removed successfully');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to remove caretaker');
+    },
+  });
+}

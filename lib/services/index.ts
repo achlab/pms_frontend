@@ -8,6 +8,9 @@
 export { authService, default as AuthenticationService } from "./auth.service";
 export { profileService, default as ProfileService } from "./profile.service";
 
+// Settings Management
+export { settingsService, default as SettingsService } from "./settings.service";
+
 // Dashboard & Analytics
 export { dashboardService, default as DashboardService } from "./dashboard.service";
 
@@ -114,15 +117,15 @@ export {
 
 // Super Admin User Management (Create ALL roles)
 export { 
-  superAdminUserService, 
-  default as SuperAdminUserService 
-} from "./super-admin-user.service";
+  superAdminUsersService, 
+  default as SuperAdminUsersService 
+} from "./super-admin-users.service";
 
 // Super Admin Property Management (System-Wide)
 export { 
-  superAdminPropertyService, 
-  default as SuperAdminPropertyService 
-} from "./super-admin-property.service";
+  superAdminPropertiesService, 
+  default as SuperAdminPropertiesService 
+} from "./super-admin-properties.service";
 
 // Super Admin Unit Management (System-Wide)
 export { 
@@ -138,15 +141,15 @@ export {
 
 // Super Admin Invoice Management (System-Wide)
 export { 
-  superAdminInvoiceService, 
-  default as SuperAdminInvoiceService 
-} from "./super-admin-invoice.service";
+  superAdminInvoicesService, 
+  default as SuperAdminInvoicesService 
+} from "./super-admin-invoices.service";
 
 // Super Admin Payment Management (System-Wide)
 export { 
-  superAdminPaymentService, 
-  default as SuperAdminPaymentService 
-} from "./super-admin-payment.service";
+  superAdminPaymentsService, 
+  default as SuperAdminPaymentsService 
+} from "./super-admin-payments.service";
 
 // Super Admin Maintenance Management (System-Wide)
 export { 

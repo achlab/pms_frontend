@@ -11,11 +11,9 @@ import type {
   SystemOverview,
   SystemFinancialSummary,
   PropertyOverview,
-  OccupancyOverview,
-  MaintenanceOverview,
-  SystemActivity,
   TopLandlordMetrics,
   CrossLandlordComparison,
+  SystemActivity,
   ApiResponse,
 } from "../api-types";
 
@@ -37,21 +35,21 @@ class SuperAdminAnalyticsService {
 
   /**
    * Get comprehensive system dashboard data
-   * 
+   *
    * @returns Complete system dashboard with all metrics
    */
   async getSystemDashboard(): Promise<ApiResponse<SystemDashboard>> {
-    return apiClient.get<ApiResponse<SystemDashboard>>("/dashboard/system");
+    return apiClient.get<ApiResponse<SystemDashboard>>("/super-admin/dashboard");
   }
 
   /**
    * Get system overview metrics
    * Key performance indicators at a glance
-   * 
+   *
    * @returns System overview data
    */
   async getSystemOverview(): Promise<ApiResponse<SystemOverview>> {
-    return apiClient.get<ApiResponse<SystemOverview>>("/dashboard/overview");
+    return apiClient.get<ApiResponse<SystemOverview>>("/super-admin/dashboard");
   }
 
   // ============================================
@@ -131,14 +129,6 @@ class SuperAdminAnalyticsService {
     return apiClient.get<ApiResponse<PropertyOverview>>("/analytics/property-overview");
   }
 
-  /**
-   * Get occupancy analytics
-   * 
-   * @returns Occupancy metrics and trends
-   */
-  async getOccupancyAnalytics(): Promise<ApiResponse<OccupancyOverview>> {
-    return apiClient.get<ApiResponse<OccupancyOverview>>("/analytics/occupancy");
-  }
 
   /**
    * Get occupancy trends over time
@@ -196,11 +186,6 @@ class SuperAdminAnalyticsService {
    * 
    * @returns Maintenance statistics across system
    */
-  async getMaintenanceOverview(): Promise<ApiResponse<MaintenanceOverview>> {
-    return apiClient.get<ApiResponse<MaintenanceOverview>>(
-      "/analytics/maintenance-overview"
-    );
-  }
 
   /**
    * Get maintenance trends over time

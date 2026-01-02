@@ -18,7 +18,7 @@ export type InvoiceStatus = "pending" | "paid" | "overdue" | "partially_paid";
 export type InvoiceType = "rent" | "utility" | "maintenance" | "other";
 
 export type PaymentMethod = "cash" | "mtn_momo" | "vodafone_cash" | "bank_transfer";
-export type PaymentStatus = "completed" | "pending" | "failed" | "recorded" | "partially_paid";
+export type PaymentStatus = "completed" | "pending" | "failed";
 
 export type MaintenanceStatus = 
   | "received" 
@@ -35,10 +35,7 @@ export type MaintenancePriority = "low" | "normal" | "urgent" | "emergency";
 export type MaintenanceUrgencyLevel = "low" | "normal" | "urgent" | "emergency";
 export type MaintenanceUpdateType = "status_change" | "note" | "assignment" | "cost_update";
 
-export type NotificationType = 
-  | "maintenance_request_submitted" 
-  | "maintenance_request_status_updated"
-  | "payment_received";
+export type NotificationType = "maintenance_request_submitted" | "maintenance_request_status_updated";
 
 // Status badge colors for UI
 export type StatusBadgeColor = "default" | "warning" | "success" | "danger" | "info";
@@ -58,12 +55,14 @@ export interface NotificationData {
   title: string;
   message: string;
   data: {
-    // Maintenance request fields
-    request_id?: string;
-    request_number?: string;
+    request_id: string;
+    request_number: string;
+    property_name: string;
+    unit_number: string;
     category?: string;
-    priority?: MaintenancePriority;
-    title?: string;
+    priority: MaintenancePriority;
+    title: string;
+    tenant_name?: string;
     old_status?: MaintenanceStatus;
     new_status?: MaintenanceStatus;
     updated_by?: string;
@@ -75,22 +74,9 @@ export interface NotificationData {
     preferred_start_date?: string;
     submitted_at?: string;
     updated_at?: string;
-    
-    // Payment fields
-    payment_id?: string;
-    payment_reference?: string;
-    amount?: number;
-    payment_method?: PaymentMethod;
-    payment_date?: string;
-    receipt_number?: string;
-    
-    // Common fields
-    property_name: string;
-    unit_number: string;
-    tenant_name?: string;
   };
   action_url: string;
-  priority?: MaintenancePriority;
+  priority: MaintenancePriority;
 }
 
 export interface Notification {
@@ -147,7 +133,6 @@ export interface User {
   address: string;
   profile_picture: string | null;
   profile_picture_url?: string | null; // Full URL to profile picture
-  photo_url?: string | null; // Backend returns this field for profile photos
   bio: string | null;
   is_verified: boolean;
   email_verified_at: string | null;
@@ -164,6 +149,7 @@ export interface LoginRequest {
 export interface LoginResponse {
   user: User;
   token: string;
+  requires_password_change?: boolean;
   success?: boolean;
   message?: string;
 }
@@ -258,16 +244,14 @@ export interface Unit {
   id: string;
   property_id: string;
   unit_number: string;
-  floor_number?: number;
+  floor: string;
   unit_type: UnitType;
-  bedrooms?: number;
-  bathrooms?: number;
-  rental_amount: number;
-  is_furnished?: boolean;
-  utilities_included?: boolean;
-  is_available?: boolean;
+  bedrooms: number;
+  bathrooms: number;
+  square_footage: number;
+  monthly_rent: number;
+  is_available: boolean;
   is_active: boolean;
-  is_occupied?: boolean;
   features?: string[];
   description?: string;
   property?: Property;
@@ -278,8 +262,6 @@ export interface Unit {
     phone: string;
   };
   caretaker?: Caretaker;
-  tenant_id?: string;
-  caretaker_id?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -400,8 +382,6 @@ export interface Payment {
   payment_date: string;
   status: PaymentStatus;
   notes: string | null;
-  receipt_url?: string | null;
-  receipt_images?: string[] | null;
   recorded_by?: {
     id: string;
     name: string;
@@ -480,6 +460,21 @@ export interface MaintenanceMedia {
   };
 }
 
+export interface MaintenanceRequestEvent {
+  id: string;
+  event_type: string;
+  title: string;
+  description: string;
+  rejection_reason?: string | null;
+  created_at: string;
+  user?: {
+    id: string;
+    name: string;
+    role: string;
+  };
+  metadata?: any;
+}
+
 export interface MaintenanceRequest {
   id: string;
   request_number: string;
@@ -491,6 +486,7 @@ export interface MaintenanceRequest {
     id: string;
     name: string;
     address: string;
+    landlord_id?: string;
   };
   unit: {
     id: string;
@@ -505,7 +501,13 @@ export interface MaintenanceRequest {
     id: string;
     name: string;
   };
+  landlord_id?: string;
   caretaker?: {
+    id: string;
+    name: string;
+    phone: string;
+  };
+  assigned_to?: {
     id: string;
     name: string;
     phone: string;
@@ -516,6 +518,7 @@ export interface MaintenanceRequest {
     icon: string;
     color: string;
     urgency_level: MaintenanceUrgencyLevel;
+    expected_resolution_hours?: number;
   };
   estimated_cost: number | null;
   actual_cost: number | null;
@@ -533,6 +536,7 @@ export interface MaintenanceRequest {
   updated_at: string;
   updates: MaintenanceUpdate[];
   media: MaintenanceMedia[];
+  events?: MaintenanceRequestEvent[];
 }
 
 export interface CreateMaintenanceRequest {
@@ -671,8 +675,6 @@ export interface PaymentQueryParams extends PaginationParams {
   start_date?: string;
   end_date?: string;
   payment_method?: PaymentMethod;
-  sort_by?: "created_at" | "amount" | "payment_date";
-  sort_order?: "asc" | "desc";
 }
 
 export interface MaintenanceQueryParams extends PaginationParams {
@@ -844,9 +846,6 @@ export interface LandlordProperty extends Property {
     unit_number: string;
     unit_type: string;
     rental_amount: number;
-    floor_number?: number;
-    bedrooms?: number;
-    bathrooms?: number;
     is_occupied: boolean;
     is_active: boolean;
     tenant_id?: string;
@@ -970,12 +969,7 @@ export interface CreateUnitRequest {
   description?: string;
   unit_type: UnitType;
   floor_number?: number;
-  bedrooms?: number;
-  bathrooms?: number;
   rental_amount: number;
-  is_furnished?: boolean;
-  utilities_included?: boolean;
-  is_active?: boolean;
   caretaker_id?: string;
 }
 
@@ -986,12 +980,7 @@ export interface UpdateUnitRequest {
   description?: string;
   unit_type?: UnitType;
   floor_number?: number;
-  bedrooms?: number;
-  bathrooms?: number;
   rental_amount?: number;
-  is_furnished?: boolean;
-  utilities_included?: boolean;
-  is_active?: boolean;
   caretaker_id?: string;
 }
 
@@ -1572,13 +1561,11 @@ export interface SystemMaintenanceRequest {
  */
 
 export interface SystemDashboard {
-  system_overview: SystemOverview;
-  user_statistics: UserRoleStatistics;
-  financial_summary: SystemFinancialSummary;
-  property_overview: PropertyOverview;
-  occupancy_overview: OccupancyOverview;
-  maintenance_overview: MaintenanceOverview;
-  recent_activities: SystemActivity[];
+  overview: SystemOverview;
+  financial: SystemFinancialSummary;
+  occupancy: OccupancyOverview;
+  maintenance: MaintenanceOverview;
+  activities: SystemActivity[];
   top_landlords: TopLandlordMetrics[];
 }
 

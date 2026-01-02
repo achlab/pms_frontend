@@ -54,9 +54,12 @@ function convertApiUserToLegacyUser(apiUser: ApiUser): User {
 export class AuthService {
   // Login with email/phone and password
   static async login(emailOrPhone: string, password: string): Promise<{ user: User; token: string }> {
-    const response = await authService.login(emailOrPhone, password);
-    const user = convertApiUserToLegacyUser(response.user);
-    return { user, token: response.token };
+    const response = await authService.login({ email: emailOrPhone, password });
+    if (!response.data) {
+      throw new Error(response.message || 'Login failed');
+    }
+    const user = convertApiUserToLegacyUser(response.data.user);
+    return { user, token: response.data.token };
   }
 
   // Register new user
@@ -77,8 +80,11 @@ export class AuthService {
       address: data.address,
       role: data.role,
     });
-    const user = convertApiUserToLegacyUser(response.user);
-    return { user, token: response.token };
+    if (!response.data) {
+      throw new Error(response.message || 'Registration failed');
+    }
+    const user = convertApiUserToLegacyUser(response.data.user);
+    return { user, token: response.data.token };
   }
 
   // Social media authentication
@@ -106,6 +112,17 @@ export class AuthService {
   // Forgot password
   static async forgotPassword(email: string): Promise<void> {
     await authService.forgotPassword(email);
+  }
+
+  // Verify email with token
+  static async verifyEmail(data: { token: string; email: string }): Promise<{ success: boolean; message: string }> {
+    const response = await authService.verifyEmail(data);
+    return response;
+  }
+
+  // Resend verification email
+  static async resendVerificationEmail(email: string): Promise<void> {
+    await authService.resendVerificationEmail(email);
   }
 
   // Get stored token

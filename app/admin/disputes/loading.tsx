@@ -1,11 +1,9 @@
-import { MainLayout } from "@/components/main-layout"
 import { CardContent, CardHeader } from "@/components/ui/card"
 import { AnimatedCard } from "@/components/animated-card"
 
 export default function AdminDisputesLoading() {
   return (
-    <MainLayout>
-      <div className="p-8 space-y-8">
+    <div className="p-8 space-y-8">
         {/* Header Skeleton */}
         <div className="animate-pulse">
           <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-2"></div>
@@ -60,7 +58,6 @@ export default function AdminDisputesLoading() {
             ))}
           </CardContent>
         </AnimatedCard>
-      </div>
-    </MainLayout>
+    </div>
   )
 }

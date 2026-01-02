@@ -20,12 +20,15 @@ import type {
 /**
  * Hook to fetch all invoices with optional filters
  */
-export function useInvoices(params?: InvoiceQueryParams, enabled: boolean = true) {
+export function useInvoices(params?: InvoiceQueryParams & { refetchInterval?: number }, enabled: boolean = true) {
+  const { refetchInterval, ...queryParams } = params || {};
+  
   return useApiQuery<PaginatedResponse<Invoice>>(
-    ["invoices", params],
-    () => invoiceService.getInvoices(params),
+    ["invoices", queryParams],
+    () => invoiceService.getInvoices(queryParams),
     {
       enabled,
+      refetchInterval: refetchInterval || false, // Enable polling if specified
     }
   );
 }

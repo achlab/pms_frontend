@@ -135,15 +135,7 @@ class ApiClient {
         if (token && config.headers) {
           config.headers.Authorization = `Bearer ${token}`;
         }
-        
-        // Enhanced request logging
-        console.group(`🚀 API Request: ${config.method?.toUpperCase()} ${config.url}`);
-        console.log('Full URL:', `${config.baseURL}${config.url}`);
-        console.log('Headers:', config.headers);
-        console.log('Data:', config.data);
-        console.log('Auth Token:', token ? `${token.substring(0, 20)}...` : 'None');
-        console.groupEnd();
-        
+
         return config;
       },
       (error: AxiosError) => {
@@ -155,11 +147,15 @@ class ApiClient {
     // Response Interceptor - Handle errors
     this.instance.interceptors.response.use(
       (response: AxiosResponse) => {
-        // Enhanced response logging
-        console.group(`✅ API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`);
-        console.log('Status:', response.status, response.statusText);
-        console.log('Data:', response.data);
-        console.groupEnd();
+        // Log successful responses for debugging
+        if (response.config.url?.includes('register') || response.config.url?.includes('email/resend')) {
+          console.log("✅ API Response Success:", {
+            url: response.config.url,
+            method: response.config.method,
+            status: response.status,
+            data: response.data,
+          });
+        }
         return response;
       },
       async (error: AxiosError<ApiError>) => {
@@ -361,14 +357,21 @@ class ApiClient {
   // ============================================
 
   async postFormData<T>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.post(url, formData, {
-      ...config,
-      headers: {
-        ...config?.headers,
-        "Content-Type": "multipart/form-data",
-      },
-    });
-    return this.normalizeResponse<T>(response.data);
+    console.log('🌐 API POST FormData request:', url, 'FormData keys:', Array.from(formData.keys()));
+    try {
+      const response = await this.instance.post(url, formData, {
+        ...config,
+        headers: {
+          ...config?.headers,
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      console.log('✅ API POST FormData response:', url, response.data);
+      return this.normalizeResponse<T>(response.data);
+    } catch (error) {
+      console.error('❌ API POST FormData error:', url, error);
+      throw error;
+    }
   }
 
   async putFormData<T>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<T> {

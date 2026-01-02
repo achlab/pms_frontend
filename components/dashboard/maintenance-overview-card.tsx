@@ -106,14 +106,14 @@ export function MaintenanceOverviewCard({ maintenance }: MaintenanceOverviewCard
           <Button
             variant="outline"
             size="sm"
-            onClick={() => router.push("/maintenance-requests")}
+            onClick={() => router.push("/maintenance")}
           >
             View All
           </Button>
           {user?.role === "tenant" && (
             <Button
               size="sm"
-              onClick={() => router.push("/maintenance-requests?action=create")}
+              onClick={() => router.push("/maintenance/create")}
             >
               New Request
             </Button>

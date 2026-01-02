@@ -223,6 +223,37 @@ class ProfileService {
       }
     );
   }
+
+  /**
+   * Change user password
+   */
+  async changePassword(data: {
+    current_password: string;
+    new_password: string;
+    new_password_confirmation: string;
+  }): Promise<void> {
+    const response = await apiClient.put<ApiResponse<null>>("/profile/password", data);
+
+    if (!response.success) {
+      throw new Error(response.message || "Failed to change password");
+    }
+  }
+
+  /**
+   * Verify user password
+   */
+  async verifyPassword(password: string): Promise<boolean> {
+    const response = await apiClient.post<ApiResponse<{ verified: boolean }>>(
+      "/profile/password/verify",
+      { password }
+    );
+
+    if (response.success && response.data) {
+      return response.data.verified;
+    }
+
+    return false;
+  }
 }
 
 // Export singleton instance

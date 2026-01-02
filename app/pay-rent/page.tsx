@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { MainLayout } from "@/components/main-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,6 +15,7 @@ import { toast } from "sonner"
 import paymentMethodService from "@/lib/services/payment-method.service"
 import { useTenantUnit } from "@/lib/hooks/use-tenant-property"
 import { useAuth } from "@/contexts/auth-context"
+import { useInvoices } from "@/lib/hooks/use-invoice"
 import {
   Smartphone,
   Building2,
@@ -28,6 +30,8 @@ import {
   X,
   Image as ImageIcon,
   Loader2,
+  FileText,
+  ArrowLeft,
 } from "lucide-react"
 
 interface PaymentMethod {
@@ -50,8 +54,11 @@ interface PaymentMethod {
 }
 
 export default function PayRentPage() {
+  console.log('🏠 PayRentPage component mounted/rendered')
+
   // Helper function to convert base64 data URL to Blob (for future FormData implementation)
   // const dataURLToBlob = (dataURL: string): Blob => {
+  //   const arr = dataURL.split(',')
   //   const arr = dataURL.split(',')
   //   const mime = arr[0].match(/:(.*?);/)?.[1] || 'image/jpeg'
   //   const bstr = atob(arr[1])
@@ -69,6 +76,12 @@ export default function PayRentPage() {
   const [isLoadingMethods, setIsLoadingMethods] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   
+  const router = useRouter()
+  
+  // Get invoice from URL params
+  const searchParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
+  const preselectedInvoiceId = searchParams.get('invoice')
+  
   // Form state for confirmation
   const [confirmationData, setConfirmationData] = useState({
     paymentDate: new Date().toISOString().split("T")[0],
@@ -76,6 +89,7 @@ export default function PayRentPage() {
     paymentMethod: "",
     transactionId: "",
     notes: "",
+    invoiceId: preselectedInvoiceId || "", // Pre-select invoice from URL
   })
 
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -87,6 +101,64 @@ export default function PayRentPage() {
 
   // Get tenant's unit information
   const { data: tenantUnitData, isLoading: isLoadingUnit } = useTenantUnit()
+  console.log('🏢 Tenant unit data:', {
+    isLoading: isLoadingUnit,
+    hasData: !!tenantUnitData?.data,
+    unitData: tenantUnitData?.data,
+    tenantIdFromUnit: tenantUnitData?.data?.unit?.tenant_id
+  })
+
+  // Get tenant's invoices for payment selection (pending and overdue are unpaid)
+  console.log('🔍 About to call useInvoices hook')
+  const { data: allInvoicesData, isLoading: isLoadingInvoices, error: invoicesError } = useInvoices({
+    // Don't filter by status - let backend filter by tenant_id and we'll show all unpaid invoices
+  })
+  console.log('📡 useInvoices result:', {
+    isLoading: isLoadingInvoices,
+    error: invoicesError,
+    dataReceived: !!allInvoicesData,
+    dataLength: allInvoicesData?.data?.length || 0,
+    rawData: allInvoicesData
+  })
+
+  // Filter invoices for current tenant
+  console.log('🔍 About to filter invoices:', {
+    tenantUnitDataLoaded: !!tenantUnitData?.data,
+    tenantUnitData: tenantUnitData?.data,
+    unitTenantId: tenantUnitData?.data?.unit?.tenant_id,
+    currentUser: currentUser,
+    currentUserTenantId: currentUser?.tenant_id
+  })
+
+  const invoicesData = allInvoicesData ? {
+    ...allInvoicesData,
+    data: allInvoicesData.data?.filter(invoice => {
+      // Show unpaid invoices: pending, overdue, or partially_paid
+      const isUnpaid = ['pending', 'overdue', 'partially_paid'].includes(invoice.status?.toLowerCase() || '')
+      const matches = invoice.tenant_id === tenantUnitData?.data?.unit?.tenant_id && isUnpaid
+      console.log('🔍 Filtering invoice:', {
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoice_number,
+        invoiceStatus: invoice.status,
+        invoiceTenantId: invoice.tenant_id,
+        expectedTenantId: tenantUnitData?.data?.unit?.tenant_id,
+        isUnpaid,
+        matches
+      })
+      return matches
+    })
+  } : undefined
+
+  console.log('✅ Final invoice filtering result:', {
+    totalInvoicesFetched: allInvoicesData?.data?.length || 0,
+    filteredInvoicesCount: invoicesData?.data?.length || 0,
+    filteredInvoices: invoicesData?.data?.map(inv => ({
+      id: inv.id,
+      number: inv.invoice_number,
+      tenant_id: inv.tenant_id,
+      amount: inv.total_amount
+    }))
+  })
 
   // Calculate rent information dynamically
   const getRentInfo = () => {
@@ -152,6 +224,17 @@ export default function PayRentPage() {
       fetchPaymentMethods()
     }
   }, [isLoadingUnit, tenantUnitData])
+
+  // Debug useEffect for invoice data changes
+  useEffect(() => {
+    console.log('📊 Invoice data changed:', {
+      hasAllInvoices: !!allInvoicesData,
+      allInvoicesCount: allInvoicesData?.data?.length || 0,
+      hasFilteredInvoices: !!invoicesData,
+      filteredInvoicesCount: invoicesData?.data?.length || 0,
+      tenantId: tenantUnitData?.data?.unit?.tenant_id
+    })
+  }, [allInvoicesData, invoicesData, tenantUnitData])
 
   const fetchPaymentMethods = async () => {
     try {
@@ -275,6 +358,11 @@ export default function PayRentPage() {
         toast.error("Please enter a valid amount")
         return
       }
+      if (!confirmationData.invoiceId || confirmationData.invoiceId.trim() === "") {
+        console.log("❌ Validation failed: No invoice selected")
+        toast.error("Please select an invoice to pay")
+        return
+      }
 
       console.log("✅ Validation passed, proceeding with submission")
       console.log("📊 Current confirmationData:", confirmationData)
@@ -316,6 +404,7 @@ export default function PayRentPage() {
         payment_date: confirmationData.paymentDate,
         notes: `Tenant payment. Receipt: ${confirmationData.transactionId || "N/A"}. ${confirmationData.notes}`.trim(),
         payment_status: 'recorded',
+        invoice_id: confirmationData.invoiceId || undefined, // Add invoice_id if selected
         receipt_images: uploadedImages.length > 0 ? uploadedImages : undefined, // Send base64 images
       }
 
@@ -340,6 +429,7 @@ export default function PayRentPage() {
           paymentMethod: "",
           transactionId: "",
           notes: "",
+          invoiceId: preselectedInvoiceId || "", // Keep preselected invoice or reset
         })
       } else {
         console.error("Payment submission failed:", response)
@@ -418,15 +508,59 @@ export default function PayRentPage() {
         <div className="container mx-auto p-6 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between animate-in fade-in-0 slide-in-from-top-4 duration-500">
-            <div className="space-y-2">
-              <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 via-blue-600 to-purple-600 dark:from-white dark:via-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
-                Pay Your Rent
-              </h1>
-              <p className="text-lg text-muted-foreground">
-                Choose your preferred payment method and complete your transaction
-              </p>
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={() => router.push('/tenant/invoices')}
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 rounded-full hover:bg-blue-100 dark:hover:bg-blue-900"
+                title="Back to Invoices"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div className="space-y-2">
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-slate-900 via-blue-600 to-purple-600 dark:from-white dark:via-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
+                  Pay Your Rent
+                </h1>
+                <p className="text-lg text-muted-foreground">
+                  Choose your preferred payment method and complete your transaction
+                </p>
+              </div>
             </div>
+            <Button
+              onClick={() => router.push('/tenant/invoices')}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <FileText className="h-4 w-4" />
+              View All Invoices
+            </Button>
           </div>
+
+          {/* Recent Invoices Summary */}
+          <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border-blue-200 dark:border-blue-700 shadow-lg animate-in fade-in-0 slide-in-from-top-4 duration-500 delay-200">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-900 dark:text-blue-100">
+                <FileText className="h-5 w-5" />
+                Recent Invoices
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-4">
+                <p className="text-blue-700 dark:text-blue-300 mb-3">
+                  View your recent invoices and payment history
+                </p>
+                <Button
+                  onClick={() => router.push('/tenant/invoices')}
+                  variant="outline"
+                  className="border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-300 dark:hover:bg-blue-900/20"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Go to My Invoices
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Current Amount Due */}
           {isLoadingUnit ? (
@@ -752,6 +886,124 @@ export default function PayRentPage() {
                       <SelectItem value="cash">Cash</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 block">
+                    Invoice to Pay *
+                  </label>
+                  <Select 
+                    value={confirmationData.invoiceId} 
+                    onValueChange={(value) => {
+                      console.log('🔄 Invoice selection changed to:', value)
+                      
+                      // Auto-fill balance amount when invoice is selected
+                      if (value && invoicesData?.data) {
+                        const selectedInvoice = invoicesData.data.find(inv => inv.id === value)
+                        console.log('💰 Selected invoice for auto-fill:', {
+                          invoice: selectedInvoice,
+                          balance: selectedInvoice?.balance,
+                          amountPaid: selectedInvoice?.amount_paid,
+                          totalAmount: selectedInvoice?.total_amount,
+                          paymentStatus: selectedInvoice?.payment_status
+                        })
+                        
+                        if (selectedInvoice) {
+                          // Use balance if available, fallback to outstanding_balance or total_amount
+                          const balanceAmount = selectedInvoice.balance 
+                            ?? selectedInvoice.outstanding_balance 
+                            ?? selectedInvoice.total_amount
+                          
+                          console.log('💰 Auto-filling amount:', balanceAmount)
+                          setConfirmationData(prev => ({ 
+                            ...prev, 
+                            invoiceId: value,
+                            amount: balanceAmount
+                          }))
+                          return
+                        }
+                      }
+                      
+                      setConfirmationData(prev => ({ ...prev, invoiceId: value }))
+                    }}
+                  >
+                    <SelectTrigger className="bg-white dark:bg-slate-700">
+                      <SelectValue placeholder="Select invoice to pay" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {invoicesData?.data && invoicesData.data.length > 0 ? (
+                        invoicesData.data.map((invoice) => {
+                          // Determine which balance to show
+                          const displayBalance = invoice.balance ?? invoice.outstanding_balance ?? invoice.total_amount
+                          const hasPartialPayment = invoice.payment_status === 'partially_paid' || 
+                            (invoice.amount_paid > 0 && invoice.amount_paid < invoice.total_amount)
+                          
+                          console.log('📄 Rendering invoice option:', {
+                            id: invoice.id,
+                            number: invoice.invoice_number,
+                            balance: displayBalance,
+                            amountPaid: invoice.amount_paid,
+                            totalAmount: invoice.total_amount,
+                            hasPartialPayment,
+                            paymentStatus: invoice.payment_status
+                          })
+                          
+                          return (
+                            <SelectItem key={invoice.id} value={invoice.id}>
+                              <div className="flex flex-col py-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold">
+                                    {invoice.invoice_number}
+                                  </span>
+                                  {hasPartialPayment && (
+                                    <span className="text-xs bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 px-2 py-0.5 rounded-full font-medium">
+                                      Partial Payment
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-sm mt-1">
+                                  {hasPartialPayment ? (
+                                    <>
+                                      <span className="text-gray-600 dark:text-gray-400">
+                                        Balance: <span className="font-medium text-gray-900 dark:text-white">
+                                          {formatCurrency(displayBalance)}
+                                        </span>
+                                      </span>
+                                      <span className="text-xs text-gray-500 dark:text-gray-500 ml-2">
+                                        (Paid: {formatCurrency(invoice.amount_paid || 0)})
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span className="text-gray-600 dark:text-gray-400">
+                                      Amount: <span className="font-medium text-gray-900 dark:text-white">
+                                        {formatCurrency(displayBalance)}
+                                      </span>
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                  {invoice.property.name} • Unit {invoice.unit.unit_number} • Due: {new Date(invoice.due_date).toLocaleDateString()}
+                                </div>
+                              </div>
+                            </SelectItem>
+                          )
+                        })
+                      ) : (
+                        <div className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">
+                          No invoices available for payment
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {invoicesData?.data?.some(inv => 
+                      inv.payment_status === 'partially_paid' || 
+                      (inv.amount_paid > 0 && inv.amount_paid < inv.total_amount)
+                    ) 
+                      ? "⚠️ Invoices with partial payments show remaining balance. Fully paid invoices are hidden."
+                      : "Select the invoice you want to pay. The balance will be auto-filled."
+                    }
+                  </p>
                 </div>
 
                 <div>

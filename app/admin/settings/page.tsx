@@ -1,7 +1,6 @@
 "use client"
 
-import { useState } from "react"
-import { MainLayout } from "@/components/main-layout"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,54 +8,152 @@ import { Switch } from "@/components/ui/switch"
 import { CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AnimatedCard } from "@/components/animated-card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Settings, Shield, Bell, Database, Globe, Save } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
+import { Settings, Shield, Bell, Database, Globe, Save, Trash2, RefreshCw, FileText, AlertCircle, CheckCircle2, Loader2, Server, HardDrive } from "lucide-react"
+import { useSettings, useUpdateSettings, useClearCache, useSystemLogs } from "@/lib/hooks/use-settings"
+import { useAuthStatus } from "@/lib/hooks/use-auth"
+import { toast } from "sonner"
 
 export default function AdminSettingsPage() {
-  const [settings, setSettings] = useState({
-    // System Settings
-    systemName: "PropertyHub Ghana",
-    systemEmail: "admin@propertyhub.gh",
-    systemTimezone: "Africa/Accra",
-    maintenanceMode: false,
+  const { currentUser: user } = useAuthStatus();
+  const { data: settings, isLoading, error, refetch } = useSettings();
+  const updateSettings = useUpdateSettings();
+  const clearCache = useClearCache();
+  const { data: logs, refetch: refetchLogs, isFetching: loadingLogs } = useSystemLogs();
 
-    // User Settings
-    autoApproveUsers: false,
-    requireGhanaCard: true,
-    allowSelfRegistration: true,
+  const [localSettings, setLocalSettings] = useState({
+    notifications: {
+      email_notifications: true,
+      push_notifications: true,
+      maintenance_alerts: true,
+      payment_reminders: true,
+      lease_expiry_alerts: true,
+      system_announcements: true,
+    },
+    preferences: {
+      language: "en",
+      timezone: "UTC",
+      date_format: "Y-m-d",
+      currency: "GHS",
+      items_per_page: 15,
+    },
+    privacy: {
+      profile_visibility: "private",
+      show_email: false,
+      show_phone: false,
+    },
+    system: {
+      maintenance_mode: false,
+      allow_registration: true,
+      require_email_verification: true,
+      session_timeout: 120,
+      max_file_size: 10,
+      allowed_file_types: ["jpg", "jpeg", "png", "pdf", "doc", "docx"],
+    },
+  });
 
-    // Notification Settings
-    emailNotifications: true,
-    smsNotifications: false,
-    systemAlerts: true,
+  const [hasChanges, setHasChanges] = useState(false);
 
-    // Security Settings
-    sessionTimeout: "24",
-    passwordExpiry: "90",
-    twoFactorAuth: false,
+  // Update local settings when data is fetched
+  useEffect(() => {
+    if (settings) {
+      setLocalSettings({
+        notifications: settings.notifications || localSettings.notifications,
+        preferences: settings.preferences || localSettings.preferences,
+        privacy: settings.privacy || localSettings.privacy,
+        system: settings.system || localSettings.system,
+      });
+    }
+  }, [settings]);
 
-    // Platform Settings
-    defaultCurrency: "GHS",
-    defaultLanguage: "en-GH",
-    maxPropertiesPerLandlord: "50",
-  })
+  const handleNotificationChange = (key: string, value: boolean) => {
+    setLocalSettings((prev) => ({
+      ...prev,
+      notifications: { ...prev.notifications, [key]: value },
+    }));
+    setHasChanges(true);
+  };
 
-  const handleSettingChange = (key: string, value: any) => {
-    setSettings((prev) => ({ ...prev, [key]: value }))
+  const handlePreferenceChange = (key: string, value: any) => {
+    setLocalSettings((prev) => ({
+      ...prev,
+      preferences: { ...prev.preferences, [key]: value },
+    }));
+    setHasChanges(true);
+  };
+
+  const handlePrivacyChange = (key: string, value: any) => {
+    setLocalSettings((prev) => ({
+      ...prev,
+      privacy: { ...prev.privacy, [key]: value },
+    }));
+    setHasChanges(true);
+  };
+
+  const handleSystemChange = (key: string, value: any) => {
+    setLocalSettings((prev) => ({
+      ...prev,
+      system: { ...prev.system, [key]: value },
+    }));
+    setHasChanges(true);
+  };
+
+  const handleSaveSettings = async () => {
+    try {
+      await updateSettings.mutateAsync(localSettings);
+      toast.success("Settings updated successfully!");
+      setHasChanges(false);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update settings");
+    }
+  };
+
+  const handleClearCache = async () => {
+    try {
+      await clearCache.mutateAsync();
+      toast.success("Cache cleared successfully!");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to clear cache");
+    }
+  };
+
+  const handleViewLogs = () => {
+    refetchLogs();
+  };
+
+  if (isLoading) {
+    return (
+      <div className="p-8 space-y-8">
+        <Skeleton className="h-12 w-64" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-96" />
+          ))}
+        </div>
+      </div>
+    );
   }
 
-  const handleSaveSettings = () => {
-    // TODO: Implement settings save
-    console.log("Saving settings:", settings)
-  }
-
-  const handleSystemBackup = () => {
-    // TODO: Implement system backup
-    console.log("Creating system backup...")
+  if (error) {
+    return (
+      <div className="p-8">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Failed to load settings. Please try refreshing the page.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
   }
 
   return (
-    <MainLayout>
-      <div className="p-8 space-y-8">
+    <div className="p-8 space-y-8">
         {/* Header */}
         <div className="flex justify-between items-start animate-in fade-in-0 slide-in-from-top-4 duration-500">
           <div>
@@ -66,282 +163,195 @@ export default function AdminSettingsPage() {
             <p className="text-gray-600 dark:text-gray-400 mt-2">
               Configure system-wide settings, security, and platform preferences.
             </p>
+            {hasChanges && (
+              <Badge variant="outline" className="mt-2 border-orange-500 text-orange-500">
+                Unsaved Changes
+              </Badge>
+            )}
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={handleSystemBackup} className="min-h-[44px] bg-transparent">
-              <Database className="h-4 w-4 mr-2" />
-              Backup System
-            </Button>
-            <Button onClick={handleSaveSettings} className="min-h-[44px]">
-              <Save className="h-4 w-4 mr-2" />
+            {user?.role === "super_admin" && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleClearCache}
+                  disabled={clearCache.isPending}
+                  className="min-h-[44px] bg-transparent"
+                >
+                  {clearCache.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4 mr-2" />
+                  )}
+                  Clear Cache
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => refetch()}
+                  className="min-h-[44px] bg-transparent"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              </>
+            )}
+            <Button
+              onClick={handleSaveSettings}
+              disabled={!hasChanges || updateSettings.isPending}
+              className="min-h-[44px]"
+            >
+              {updateSettings.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
               Save Settings
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* System Configuration */}
-          <AnimatedCard delay={100} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
-                <Settings className="h-5 w-5" />
-                System Configuration
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="systemName">System Name</Label>
-                <Input
-                  id="systemName"
-                  value={settings.systemName}
-                  onChange={(e) => handleSettingChange("systemName", e.target.value)}
-                  className="border-gray-200 dark:border-gray-700"
-                />
-              </div>
+        <Tabs defaultValue="general" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
+            <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
+            {user?.role === "super_admin" && (
+              <>
+                <TabsTrigger value="system">System</TabsTrigger>
+                <TabsTrigger value="logs">Logs</TabsTrigger>
+              </>
+            )}
+          </TabsList>
 
-              <div className="space-y-2">
-                <Label htmlFor="systemEmail">System Email</Label>
-                <Input
-                  id="systemEmail"
-                  type="email"
-                  value={settings.systemEmail}
-                  onChange={(e) => handleSettingChange("systemEmail", e.target.value)}
-                  className="border-gray-200 dark:border-gray-700"
-                />
-              </div>
+          {/* General Tab */}
+          <TabsContent value="general" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Preferences */}
+              <AnimatedCard delay={100} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Globe className="h-5 w-5" />
+                    Preferences
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="language">Language</Label>
+                    <Select
+                      value={localSettings.preferences.language}
+                      onValueChange={(value) => handlePreferenceChange("language", value)}
+                    >
+                      <SelectTrigger className="border-gray-200 dark:border-gray-700">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="en">English</SelectItem>
+                        <SelectItem value="en-GH">English (Ghana)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="systemTimezone">System Timezone</Label>
-                <Select
-                  value={settings.systemTimezone}
-                  onValueChange={(value) => handleSettingChange("systemTimezone", value)}
-                >
-                  <SelectTrigger className="border-gray-200 dark:border-gray-700">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Africa/Accra">Africa/Accra (GMT)</SelectItem>
-                    <SelectItem value="UTC">UTC</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="timezone">Timezone</Label>
+                    <Select
+                      value={localSettings.preferences.timezone}
+                      onValueChange={(value) => handlePreferenceChange("timezone", value)}
+                    >
+                      <SelectTrigger className="border-gray-200 dark:border-gray-700">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UTC">UTC</SelectItem>
+                        <SelectItem value="Africa/Accra">Africa/Accra (GMT)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Maintenance Mode</Label>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Temporarily disable system access for maintenance
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.maintenanceMode}
-                  onCheckedChange={(checked) => handleSettingChange("maintenanceMode", checked)}
-                />
-              </div>
-            </CardContent>
-          </AnimatedCard>
+                  <div className="space-y-2">
+                    <Label htmlFor="currency">Currency</Label>
+                    <Select
+                      value={localSettings.preferences.currency}
+                      onValueChange={(value) => handlePreferenceChange("currency", value)}
+                    >
+                      <SelectTrigger className="border-gray-200 dark:border-gray-700">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GHS">Ghana Cedi (₵)</SelectItem>
+                        <SelectItem value="USD">US Dollar ($)</SelectItem>
+                        <SelectItem value="EUR">Euro (€)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-          {/* User Management Settings */}
-          <AnimatedCard delay={200} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
-                <Shield className="h-5 w-5" />
-                User Management
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Auto-approve Users</Label>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Automatically approve new user registrations
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.autoApproveUsers}
-                  onCheckedChange={(checked) => handleSettingChange("autoApproveUsers", checked)}
-                />
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="items_per_page">Items Per Page</Label>
+                    <Input
+                      id="items_per_page"
+                      type="number"
+                      value={localSettings.preferences.items_per_page}
+                      onChange={(e) => handlePreferenceChange("items_per_page", parseInt(e.target.value))}
+                      className="border-gray-200 dark:border-gray-700"
+                    />
+                  </div>
+                </CardContent>
+              </AnimatedCard>
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Require Ghana Card</Label>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Require Ghana Card ID for user registration
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.requireGhanaCard}
-                  onCheckedChange={(checked) => handleSettingChange("requireGhanaCard", checked)}
-                />
-              </div>
+              {/* Privacy */}
+              <AnimatedCard delay={200} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
+                    <Shield className="h-5 w-5" />
+                    Privacy
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="profile_visibility">Profile Visibility</Label>
+                    <Select
+                      value={localSettings.privacy.profile_visibility}
+                      onValueChange={(value) => handlePrivacyChange("profile_visibility", value)}
+                    >
+                      <SelectTrigger className="border-gray-200 dark:border-gray-700">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="private">Private</SelectItem>
+                        <SelectItem value="public">Public</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Allow Self Registration</Label>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Allow users to register without admin invitation
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.allowSelfRegistration}
-                  onCheckedChange={(checked) => handleSettingChange("allowSelfRegistration", checked)}
-                />
-              </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Show Email</Label>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Make your email visible to others
+                      </p>
+                    </div>
+                    <Switch
+                      checked={localSettings.privacy.show_email}
+                      onCheckedChange={(checked) => handlePrivacyChange("show_email", checked)}
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="maxProperties">Max Properties per Landlord</Label>
-                <Input
-                  id="maxProperties"
-                  type="number"
-                  value={settings.maxPropertiesPerLandlord}
-                  onChange={(e) => handleSettingChange("maxPropertiesPerLandlord", e.target.value)}
-                  className="border-gray-200 dark:border-gray-700"
-                />
-              </div>
-            </CardContent>
-          </AnimatedCard>
-
-          {/* Notification Settings */}
-          <AnimatedCard delay={300} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
-                <Bell className="h-5 w-5" />
-                Notifications
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Email Notifications</Label>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Send system notifications via email</p>
-                </div>
-                <Switch
-                  checked={settings.emailNotifications}
-                  onCheckedChange={(checked) => handleSettingChange("emailNotifications", checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>SMS Notifications</Label>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Send notifications via SMS (requires SMS provider)
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.smsNotifications}
-                  onCheckedChange={(checked) => handleSettingChange("smsNotifications", checked)}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>System Alerts</Label>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Receive alerts for system events and errors
-                  </p>
-                </div>
-                <Switch
-                  checked={settings.systemAlerts}
-                  onCheckedChange={(checked) => handleSettingChange("systemAlerts", checked)}
-                />
-              </div>
-            </CardContent>
-          </AnimatedCard>
-
-          {/* Security Settings */}
-          <AnimatedCard delay={400} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
-                <Shield className="h-5 w-5" />
-                Security
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="sessionTimeout">Session Timeout (hours)</Label>
-                <Input
-                  id="sessionTimeout"
-                  type="number"
-                  value={settings.sessionTimeout}
-                  onChange={(e) => handleSettingChange("sessionTimeout", e.target.value)}
-                  className="border-gray-200 dark:border-gray-700"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="passwordExpiry">Password Expiry (days)</Label>
-                <Input
-                  id="passwordExpiry"
-                  type="number"
-                  value={settings.passwordExpiry}
-                  onChange={(e) => handleSettingChange("passwordExpiry", e.target.value)}
-                  className="border-gray-200 dark:border-gray-700"
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>Two-Factor Authentication</Label>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">Require 2FA for admin accounts</p>
-                </div>
-                <Switch
-                  checked={settings.twoFactorAuth}
-                  onCheckedChange={(checked) => handleSettingChange("twoFactorAuth", checked)}
-                />
-              </div>
-            </CardContent>
-          </AnimatedCard>
-        </div>
-
-        {/* Platform Settings */}
-        <AnimatedCard delay={500} className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-gray-900 dark:text-white">
-              <Globe className="h-5 w-5" />
-              Platform Settings
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="defaultCurrency">Default Currency</Label>
-                <Select
-                  value={settings.defaultCurrency}
-                  onValueChange={(value) => handleSettingChange("defaultCurrency", value)}
-                >
-                  <SelectTrigger className="border-gray-200 dark:border-gray-700">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="GHS">Ghana Cedi (₵)</SelectItem>
-                    <SelectItem value="USD">US Dollar ($)</SelectItem>
-                    <SelectItem value="EUR">Euro (€)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="defaultLanguage">Default Language</Label>
-                <Select
-                  value={settings.defaultLanguage}
-                  onValueChange={(value) => handleSettingChange("defaultLanguage", value)}
-                >
-                  <SelectTrigger className="border-gray-200 dark:border-gray-700">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="en-GH">English (Ghana)</SelectItem>
-                    <SelectItem value="en-US">English (US)</SelectItem>
-                    <SelectItem value="tw">Twi</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label>Show Phone</Label>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Make your phone number visible to others
+                      </p>
+                    </div>
+                    <Switch
+                      checked={localSettings.privacy.show_phone}
+                      onCheckedChange={(checked) => handlePrivacyChange("show_phone", checked)}
+                    />
+                  </div>
+                </CardContent>
+              </AnimatedCard>
             </div>
-          </CardContent>
-        </AnimatedCard>
+          </TabsContent>
+        </Tabs>
       </div>
-    </MainLayout>
   )
 }

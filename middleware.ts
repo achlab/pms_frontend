@@ -14,6 +14,8 @@ interface User {
   role: UserRole
   email: string
   name: string
+  isVerified?: boolean
+  is_verified?: boolean // API might use snake_case
 }
 
 // Public routes (no authentication required)
@@ -28,7 +30,7 @@ const PUBLIC_ROUTES = [
 // Role-specific protected route prefixes
 const ROLE_ROUTE_PREFIXES = {
   super_admin: ['/admin'],
-  landlord: ['/landlord', '/properties', '/tenants', '/invoices', '/payments', '/payment-methods', '/rent-roll', '/reports'],
+  landlord: ['/landlord'],
   caretaker: ['/caretaker', '/maintenance-requests', '/my-unit'],
   tenant: ['/tenant', '/my-lease', '/my-unit', '/pay-rent', '/payments-invoices', '/meter-readings'],
 }
@@ -88,21 +90,41 @@ export function middleware(request: NextRequest) {
   // ============================================
   // 2. AUTHENTICATED ACCESS TO PUBLIC ROUTES
   // ============================================
-  
+
+  // Check if user is verified (handle both camelCase and snake_case)
+  const isVerified = user.isVerified === true || user.is_verified === true // Only verified if explicitly true
+
   // Redirect logged-in users away from login/register
   if (path === '/login' || path === '/register') {
-    return NextResponse.redirect(new URL(DEFAULT_DASHBOARDS[user.role], request.url))
+    if (isVerified) {
+      return NextResponse.redirect(new URL(DEFAULT_DASHBOARDS[user.role], request.url))
+    } else {
+      // Unverified users stay on login/register pages
+      return NextResponse.next()
+    }
   }
 
-  // Redirect from root to role-specific dashboard
+  // Redirect from root to role-specific dashboard (only if verified)
   if (path === '/' || path === '/dashboard') {
-    return NextResponse.redirect(new URL(DEFAULT_DASHBOARDS[user.role], request.url))
+    if (isVerified) {
+      return NextResponse.redirect(new URL(DEFAULT_DASHBOARDS[user.role], request.url))
+    } else {
+      // Unverified users go to login
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
   }
 
   // ============================================
   // 3. ROLE-BASED ACCESS CONTROL
   // ============================================
-  
+
+  // Check if user is verified - unverified users can only access public routes
+  if (!isVerified) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('message', 'Please verify your email before accessing the dashboard')
+    return NextResponse.redirect(loginUrl)
+  }
+
   // Check if accessing a shared route
   const isSharedRoute = SHARED_ROUTES.some(route => path.startsWith(route))
   if (isSharedRoute) {
@@ -112,7 +134,7 @@ export function middleware(request: NextRequest) {
   // Check if user is accessing a route for their role
   const userRolePrefixes = ROLE_ROUTE_PREFIXES[user.role] || []
   const hasAccessToRoute = userRolePrefixes.some(prefix => path.startsWith(prefix))
-  
+
   if (hasAccessToRoute) {
     return NextResponse.next()
   }

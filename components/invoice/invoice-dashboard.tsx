@@ -12,9 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { DatePicker } from "@/components/ui/date-picker";
 import { CreateInvoiceModal } from "./create-invoice-modal";
-import { ApiTestComponent } from "../debug/api-test";
 import { RecordPaymentModal } from "../payment/record-payment-modal";
-import { UserRoleDebug } from "../debug/user-role-debug";
 import { SelectInvoiceModal } from "../payment/select-invoice-modal";
 import { 
   FileText, 
@@ -324,9 +322,7 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
   };
 
   // Get status badge variant
-  const getStatusBadgeVariant = (status?: InvoiceStatus) => {
-    if (!status) return "secondary";
-    
+  const getStatusBadgeVariant = (status: InvoiceStatus) => {
     switch (status) {
       case "paid":
         return "default";
@@ -342,25 +338,11 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
   };
 
   // Format currency
-  const formatCurrency = (amount?: number | null) => {
-    if (amount === undefined || amount === null || isNaN(amount)) return '₵0.00';
-    
+  const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-GH', {
       style: 'currency',
       currency: 'GHS'
     }).format(amount);
-  };
-
-  // Safely format date
-  const formatDate = (dateString?: string | null) => {
-    if (!dateString) return 'N/A';
-    try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Invalid Date';
-      return date.toLocaleDateString();
-    } catch (error) {
-      return 'Invalid Date';
-    }
   };
 
   if (loading) {
@@ -372,16 +354,16 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Invoice Management</h1>
-          <p className="text-sm md:text-base text-muted-foreground">
+          <h1 className="text-3xl font-bold tracking-tight">Invoice Management</h1>
+          <p className="text-muted-foreground">
             Manage invoices, payments, and billing for your properties
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -674,7 +656,7 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
                       <p><strong>Due Date:</strong> {bulkGenerationData.due_date}</p>
                       <p><strong>Period:</strong> {bulkGenerationData.period_start} to {bulkGenerationData.period_end}</p>
                       {bulkGenerationData.additional_charges && bulkGenerationData.additional_charges.length > 0 && (
-                        <p><strong>Additional Charges:</strong> {bulkGenerationData.additional_charges.length} item(s)</p>
+                        <p key="additional-charges-summary"><strong>Additional Charges:</strong> {bulkGenerationData.additional_charges.length} item(s)</p>
                       )}
                     </div>
                   </div>
@@ -835,32 +817,6 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
       </Card>
 
       {/* Debug Components - Remove these after testing */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>🔧 Debug: API Testing</CardTitle>
-            <CardDescription>
-              Use this to test if the API calls are working properly.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ApiTestComponent />
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>👤 Debug: User Role</CardTitle>
-            <CardDescription>
-              Check your user role and payment permissions.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <UserRoleDebug />
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Invoice List */}
       <Card>
         <CardHeader>
@@ -884,41 +840,24 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
               </div>
             ) : (
               invoices.map((invoice) => (
-                <div key={invoice.id} className="flex flex-col md:flex-row md:items-center md:justify-between p-4 border rounded-lg gap-4">
-                  <div className="flex flex-col space-y-2 flex-1">
-                    <div className="flex items-start justify-between">
-                      <div className="flex flex-col gap-1">
-                        <div className="font-semibold text-base">{invoice.invoice_number || 'N/A'}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {invoice.property?.name || 'N/A'} - Unit {invoice.unit?.unit_number || 'N/A'}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          Tenant: {invoice.tenant?.name || 'N/A'}
-                        </div>
-                      </div>
-                      <Badge variant={getStatusBadgeVariant(invoice.status)} className="md:hidden">
-                        {invoice.status?.replace('_', ' ') || 'Unknown'}
-                      </Badge>
-                    </div>
-                    
-                    <div className="flex flex-col gap-1 md:hidden">
-                      <div className="font-semibold text-lg">{formatCurrency(invoice.total_amount)}</div>
+                <div key={invoice.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-4">
+                    <div className="flex flex-col">
+                      <div className="font-semibold">{invoice.invoice_number}</div>
                       <div className="text-sm text-muted-foreground">
-                        Due: {formatDate(invoice.due_date)}
+                        {invoice.property.name} - Unit {invoice.unit.unit_number}
                       </div>
-                      {invoice.outstanding_balance > 0 && (
-                        <div className="text-sm text-destructive">
-                          Outstanding: {formatCurrency(invoice.outstanding_balance)}
-                        </div>
-                      )}
+                      <div className="text-sm text-muted-foreground">
+                        Tenant: {invoice.tenant.name}
+                      </div>
                     </div>
                   </div>
                   
-                  <div className="hidden md:flex md:items-center md:gap-4">
-                    <div className="text-right min-w-[120px]">
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
                       <div className="font-semibold">{formatCurrency(invoice.total_amount)}</div>
                       <div className="text-sm text-muted-foreground">
-                        Due: {formatDate(invoice.due_date)}
+                        Due: {new Date(invoice.due_date).toLocaleDateString()}
                       </div>
                       {invoice.outstanding_balance > 0 && (
                         <div className="text-sm text-destructive">
@@ -928,35 +867,34 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
                     </div>
                     
                     <Badge variant={getStatusBadgeVariant(invoice.status)}>
-                      {invoice.status?.replace('_', ' ') || 'Unknown'}
+                      {invoice.status.replace('_', ' ')}
                     </Badge>
-                  </div>
                     
-                  <div className="flex flex-wrap items-center gap-2">
-                      <Button variant="outline" size="sm" title="View Invoice">
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm">
                         <FileText className="h-4 w-4" />
                       </Button>
-                      <Button variant="outline" size="sm" title="Download Invoice">
+                      <Button variant="outline" size="sm">
                         <Download className="h-4 w-4" />
                       </Button>
-                      {userRole === "landlord" && invoice.status && invoice.status !== "paid" && (
+                      {userRole === "landlord" && invoice.status !== "paid" && (
                         <>
                           <Button 
                             variant="outline" 
                             size="sm"
                             onClick={() => handleRecordPayment(invoice.id)}
-                            title="Record Payment"
                           >
                             <CreditCard className="h-4 w-4" />
                           </Button>
                           {invoice.status === "pending" && (
-                            <Button variant="outline" size="sm" title="Send Invoice">
+                            <Button variant="outline" size="sm">
                               <Send className="h-4 w-4" />
                             </Button>
                           )}
                         </>
                       )}
                     </div>
+                  </div>
                 </div>
               ))
             )}

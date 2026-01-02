@@ -35,7 +35,7 @@ export function useLandlordUnits(params?: UnitQueryParams) {
     try {
       setLoading(true);
       setError(null);
-      const response = await landlordUnitService.getAllUnits(params);
+      const response = await landlordUnitService.getUnits(params);
       setData(response);
     } catch (err: any) {
       setError(err.message || "Failed to fetch units");

@@ -102,6 +102,14 @@ export function useCreateMaintenanceRequest() {
   return useApiMutation<ApiResponse<MaintenanceRequest>, CreateMaintenanceRequest>(
     async (data) => {
       return maintenanceService.createMaintenanceRequest(data);
+    },
+    {
+      onSuccess: (data) => {
+        console.log('✅ Maintenance request created successfully:', data);
+      },
+      onError: (error) => {
+        console.error('❌ Failed to create maintenance request:', error);
+      },
     }
   );
 }
@@ -115,6 +123,18 @@ export function useAddMaintenanceNote() {
     { requestId: string; data: AddMaintenanceNoteRequest }
   >(async ({ requestId, data }) => {
     return maintenanceService.addNote(requestId, data);
+  });
+}
+
+/**
+ * Hook to mark a maintenance request as resolved/unresolved (Tenant only)
+ */
+export function useMarkMaintenanceResolution() {
+  return useApiMutation<
+    ApiResponse<MaintenanceRequest>,
+    { requestId: string; isResolved: boolean; resolutionNote?: string; photos?: File[] }
+  >(async ({ requestId, isResolved, resolutionNote, photos }) => {
+    return maintenanceService.markResolution(requestId, isResolved, resolutionNote, photos);
   });
 }
 

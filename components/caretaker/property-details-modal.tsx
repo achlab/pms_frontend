@@ -52,14 +52,14 @@ export function PropertyDetailsModal({
   const [activeTab, setActiveTab] = useState("overview");
 
   // Fetch property details
-  const { data: propertyData, isLoading: propertyLoading } = useQuery({
+  const { data: propertyData, isLoading: propertyLoading, error: propertyError } = useQuery({
     queryKey: ["caretaker-property", propertyId],
     queryFn: () => caretakerPropertyService.getProperty(propertyId!),
     enabled: !!propertyId && open,
   });
 
   // Fetch property units
-  const { data: unitsData, isLoading: unitsLoading } = useQuery({
+  const { data: unitsData, isLoading: unitsLoading, error: unitsError } = useQuery({
     queryKey: ["caretaker-property-units", propertyId],
     queryFn: () => caretakerPropertyService.getPropertyUnits(propertyId!),
     enabled: !!propertyId && open,
@@ -68,12 +68,34 @@ export function PropertyDetailsModal({
   const property = propertyData?.data as CaretakerProperty | undefined;
   const units = unitsData?.data || [];
 
+  // Debug logging
+  if (open && propertyId) {
+    console.log("PropertyDetailsModal - Property Data:", {
+      propertyData,
+      property,
+      propertyId,
+      propertyError,
+    });
+    console.log("PropertyDetailsModal - Units Data:", {
+      unitsData,
+      units,
+      unitsError,
+    });
+  }
+
   const isLoading = propertyLoading || unitsLoading;
 
-  const occupiedUnits = units.filter((unit) => unit.is_occupied);
-  const vacantUnits = units.filter((unit) => !unit.is_occupied);
-  const activeUnits = units.filter((unit) => unit.is_active);
-  const inactiveUnits = units.filter((unit) => !unit.is_active);
+  // Use actual units data if available, otherwise use property summary stats
+  const totalUnitsCount = units.length > 0 ? units.length : (property?.total_units || 0);
+  const occupiedUnitsCount = units.length > 0 
+    ? units.filter((unit) => unit.is_occupied || (unit as any).is_occupied).length 
+    : (property?.occupied_units || 0);
+  const vacantUnitsCount = totalUnitsCount - occupiedUnitsCount;
+  
+  const occupiedUnits = units.filter((unit) => unit.is_occupied || (unit as any).is_occupied);
+  const vacantUnits = units.filter((unit) => !(unit.is_occupied || (unit as any).is_occupied));
+  const activeUnits = units.filter((unit) => unit.is_active !== false);
+  const inactiveUnits = units.filter((unit) => unit.is_active === false);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -90,10 +112,17 @@ export function PropertyDetailsModal({
             <Skeleton className="h-32 w-full" />
             <Skeleton className="h-64 w-full" />
           </div>
+        ) : propertyError ? (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Failed to load property details: {propertyError instanceof Error ? propertyError.message : 'Unknown error'}
+            </AlertDescription>
+          </Alert>
         ) : !property ? (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>Failed to load property details.</AlertDescription>
+            <AlertDescription>Failed to load property details. No data received from server.</AlertDescription>
           </Alert>
         ) : (
           <div className="space-y-6">
@@ -102,7 +131,7 @@ export function PropertyDetailsModal({
               <Card className="border-2">
                 <CardContent className="pt-4">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-blue-600">{units.length}</p>
+                    <p className="text-2xl font-bold text-blue-600">{totalUnitsCount}</p>
                     <p className="text-xs text-muted-foreground mt-1">Total Units</p>
                   </div>
                 </CardContent>
@@ -111,7 +140,7 @@ export function PropertyDetailsModal({
               <Card className="border-2">
                 <CardContent className="pt-4">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-green-600">{occupiedUnits.length}</p>
+                    <p className="text-2xl font-bold text-green-600">{occupiedUnitsCount}</p>
                     <p className="text-xs text-muted-foreground mt-1">Occupied</p>
                   </div>
                 </CardContent>
@@ -120,7 +149,7 @@ export function PropertyDetailsModal({
               <Card className="border-2">
                 <CardContent className="pt-4">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-orange-600">{vacantUnits.length}</p>
+                    <p className="text-2xl font-bold text-orange-600">{vacantUnitsCount}</p>
                     <p className="text-xs text-muted-foreground mt-1">Vacant</p>
                   </div>
                 </CardContent>
@@ -173,24 +202,35 @@ export function PropertyDetailsModal({
                         <MapPin className="h-4 w-4 text-muted-foreground mt-1" />
                         <div>
                           <p className="text-sm text-muted-foreground">Address</p>
-                          <p className="font-medium">{property.address}</p>
-                          {(property.city || property.region) && (
-                            <p className="text-sm text-muted-foreground">
+                          <p className="font-medium">
+                            {property.address || 
+                             (property as any).street_address || 
+                             'Address not available'}
+                          </p>
+                          {(property.city || property.region || property.country) && (
+                            <p className="text-sm text-muted-foreground mt-1">
                               {[property.city, property.region, property.country]
                                 .filter(Boolean)
                                 .join(", ")}
+                            </p>
+                          )}
+                          {(property as any).ghana_post_gps_address && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              GPS: {(property as any).ghana_post_gps_address}
                             </p>
                           )}
                         </div>
                       </div>
                     </div>
 
-                    {property.description && (
+                    {(property.description || (property as any).description) && (
                       <>
                         <Separator />
                         <div>
                           <p className="text-sm text-muted-foreground mb-1">Description</p>
-                          <p className="text-sm">{property.description}</p>
+                          <p className="text-sm">
+                            {property.description || (property as any).description || 'No description available'}
+                          </p>
                         </div>
                       </>
                     )}
@@ -226,10 +266,19 @@ export function PropertyDetailsModal({
 
               {/* Units Tab */}
               <TabsContent value="units" className="space-y-4">
-                {units.length === 0 ? (
+                {units.length === 0 && totalUnitsCount === 0 ? (
                   <Alert>
                     <Home className="h-4 w-4" />
-                    <AlertDescription>No units found for this property.</AlertDescription>
+                    <AlertDescription>
+                      No units found for this property. {property?.total_units ? `Expected ${property.total_units} units.` : ''}
+                    </AlertDescription>
+                  </Alert>
+                ) : units.length === 0 && totalUnitsCount > 0 ? (
+                  <Alert>
+                    <Home className="h-4 w-4" />
+                    <AlertDescription>
+                      Unit details are not available, but this property has {totalUnitsCount} {totalUnitsCount === 1 ? 'unit' : 'units'}.
+                    </AlertDescription>
                   </Alert>
                 ) : (
                   <div className="grid md:grid-cols-2 gap-4">
@@ -318,11 +367,18 @@ export function PropertyDetailsModal({
 
               {/* Tenants Tab */}
               <TabsContent value="tenants" className="space-y-4">
-                {occupiedUnits.length === 0 ? (
+                {occupiedUnits.length === 0 && occupiedUnitsCount === 0 ? (
                   <Alert>
                     <Users className="h-4 w-4" />
                     <AlertDescription>
                       No tenants currently residing in this property.
+                    </AlertDescription>
+                  </Alert>
+                ) : occupiedUnits.length === 0 && occupiedUnitsCount > 0 ? (
+                  <Alert>
+                    <Users className="h-4 w-4" />
+                    <AlertDescription>
+                      Tenant details are not available, but this property has {occupiedUnitsCount} occupied {occupiedUnitsCount === 1 ? 'unit' : 'units'}.
                     </AlertDescription>
                   </Alert>
                 ) : (

@@ -192,10 +192,10 @@ export default function MyUnitPage() {
             <h2 className="text-2xl font-semibold mb-6">Assigned Properties</h2>
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {caretakerProperties?.map((property) => {
-                // Use actual property data, fallback to 0
-                const totalUnits = property.total_units ?? 0;
-                const occupiedUnits = property.occupied_units ?? 0;
-                const vacantUnits = totalUnits - occupiedUnits;
+                // Use actual property data from backend
+                const totalUnits = property?.total_units ?? (property as any)?.total_units ?? 0;
+                const occupiedUnits = property?.occupied_units ?? (property as any)?.occupied_units ?? 0;
+                const vacantUnits = Math.max(0, totalUnits - occupiedUnits);
                 const occupancyRate = totalUnits > 0 
                   ? Math.round((occupiedUnits / totalUnits) * 100)
                   : 0;
@@ -206,17 +206,17 @@ export default function MyUnitPage() {
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1">
                           <CardTitle className="text-xl group-hover:text-primary transition-colors">
-                            {property?.name || 'Unnamed Property'}
+                            {property?.name || (property as any)?.name || 'Unnamed Property'}
                           </CardTitle>
                           <p className="text-sm text-muted-foreground mt-1.5 capitalize font-medium">
-                            {property?.property_type?.replace(/_/g, ' ') || 'Property'}
+                            {(property?.property_type || (property as any)?.property_type)?.replace(/_/g, ' ') || 'Property'}
                           </p>
                         </div>
                         <Badge 
-                          variant={property?.is_active ? "default" : "secondary"}
+                          variant={(property?.is_active !== false && property?.is_active !== undefined) || (property as any)?.is_active ? "default" : "secondary"}
                           className="ml-2"
                         >
-                          {property?.is_active ? "Active" : "Inactive"}
+                          {(property?.is_active !== false && property?.is_active !== undefined) || (property as any)?.is_active ? "Active" : "Inactive"}
                         </Badge>
                       </div>
                     </CardHeader>
@@ -226,10 +226,21 @@ export default function MyUnitPage() {
                       <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
                         <MapPin className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
                         <div className="text-sm flex-1">
-                          <p className="font-medium">{property?.address || 'Address not available'}</p>
-                          {(property?.city || property?.region) && (
+                          <p className="font-medium">
+                            {property?.address || 
+                             (property as any)?.street_address || 
+                             'Address not available'}
+                          </p>
+                          {(property?.city || property?.region || property?.country) && (
                             <p className="text-muted-foreground mt-0.5">
-                              {[property?.city, property?.region].filter(Boolean).join(', ')}
+                              {[property?.city, property?.region, property?.country]
+                                .filter(Boolean)
+                                .join(', ')}
+                            </p>
+                          )}
+                          {(property as any)?.ghana_post_gps_address && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              GPS: {(property as any).ghana_post_gps_address}
                             </p>
                           )}
                         </div>

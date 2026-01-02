@@ -38,22 +38,32 @@ const usersSlice = createSlice({
       state.currentUser = action.payload;
       state.isAuthenticated = !!action.payload;
     },
-    syncAuthState: (state) => {
-      // Sync auth state from localStorage or token
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
-      
-      if (token && userStr) {
-        try {
-          state.currentUser = JSON.parse(userStr);
-          state.isAuthenticated = true;
-        } catch {
+    syncAuthState: (state, action) => {
+      // Sync auth state from the AuthProvider (passed as payload) or localStorage as fallback
+      const authState = action.payload;
+
+      if (authState) {
+        // Use auth context state if provided
+        state.currentUser = authState.user;
+        state.isAuthenticated = authState.isAuthenticated;
+        state.loading = authState.isLoading;
+      } else {
+        // Fallback to localStorage (legacy compatibility)
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const userStr = typeof window !== "undefined" ? localStorage.getItem("user") : null;
+
+        if (token && userStr) {
+          try {
+            state.currentUser = JSON.parse(userStr);
+            state.isAuthenticated = true;
+          } catch {
+            state.currentUser = null;
+            state.isAuthenticated = false;
+          }
+        } else {
           state.currentUser = null;
           state.isAuthenticated = false;
         }
-      } else {
-        state.currentUser = null;
-        state.isAuthenticated = false;
       }
     },
     clearUser: (state) => {

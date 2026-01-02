@@ -45,11 +45,11 @@ class LandlordAnalyticsService {
   /**
    * Get comprehensive dashboard overview
    * Includes all key metrics, charts, and summaries
-   * 
+   *
    * @returns Complete dashboard data
    */
   async getDashboardOverview(): Promise<ApiResponse<LandlordDashboardOverview>> {
-    return apiClient.get<ApiResponse<LandlordDashboardOverview>>("/dashboard/overview");
+    return apiClient.get<ApiResponse<LandlordDashboardOverview>>("/landlord/dashboard");
   }
 
   /**

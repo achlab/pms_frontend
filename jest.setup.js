@@ -20,20 +20,8 @@ jest.mock('next/navigation', () => ({
   },
 }))
 
-// Mock auth context
-jest.mock('@/contexts/auth-context', () => ({
-  useAuth: () => ({
-    user: {
-      id: 'test-user-id',
-      name: 'Test User',
-      email: 'test@example.com',
-      role: 'landlord',
-    },
-    isAuthenticated: true,
-    login: jest.fn(),
-    logout: jest.fn(),
-  }),
-}))
+// Auth context mock removed - not needed for service-level tests
+// Component tests that use auth context should mock it in their own test files
 
 // Global test utilities
 global.ResizeObserver = jest.fn().mockImplementation(() => ({

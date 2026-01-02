@@ -58,12 +58,15 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
   const [propertyDetails, setPropertyDetails] = useState<LandlordProperty>(property)
   const [financials, setFinancials] = useState<PropertyFinancials | null>(null)
   const [availableTenants, setAvailableTenants] = useState<AvailableTenant[]>([])
+  const [availableCaretakers, setAvailableCaretakers] = useState<User[]>([])
   
   // Modal states
   const [isCreateUnitOpen, setIsCreateUnitOpen] = useState(false)
   const [isAssignTenantOpen, setIsAssignTenantOpen] = useState(false)
+  const [isAssignCaretakerOpen, setIsAssignCaretakerOpen] = useState(false)
   const [selectedUnit, setSelectedUnit] = useState<any>(null)
   const [selectedTenantId, setSelectedTenantId] = useState("")
+  const [selectedCaretakerId, setSelectedCaretakerId] = useState("")
   
   // Form states
   const [unitFormData, setUnitFormData] = useState<CreateUnitRequest>({
@@ -101,11 +104,12 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
       setLoading(true)
       console.log('🔄 Loading data for property:', property.id)
       // Execute all API calls in parallel for better performance
-      const [propertyResponse, statisticsResponse, financialsResponse, tenantsResponse] = await Promise.allSettled([
+      const [propertyResponse, statisticsResponse, financialsResponse, tenantsResponse, caretakersResponse] = await Promise.allSettled([
         landlordPropertyService.getProperty(property.id),
         landlordPropertyService.getPropertyStatistics(property.id),
         landlordPropertyService.getPropertyFinancials(property.id),
-        landlordUserService.getAvailableTenants()
+        landlordUserService.getAvailableTenants(),
+        landlordUserService.getAvailableCaretakers()
       ])
       
       console.log('📥 All Responses:', {
@@ -202,6 +206,11 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
       // Handle available tenants
       if (tenantsResponse.status === 'fulfilled' && tenantsResponse.value.data) {
         setAvailableTenants(tenantsResponse.value.data)
+      }
+
+      // Handle available caretakers
+      if (caretakersResponse.status === 'fulfilled' && caretakersResponse.value.data) {
+        setAvailableCaretakers(caretakersResponse.value.data)
       }
 
     } catch (error: any) {
@@ -543,16 +552,68 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
     }
   }
 
+  const handleAssignCaretaker = async () => {
+    // Check if property is disabled
+    const activeValue = (propertyDetails as any).isActive ?? propertyDetails.is_active;
+    const isActive = activeValue !== false;
+
+    if (!isActive) {
+      toast({
+        title: "Property Disabled",
+        description: "Cannot assign caretakers to units in a disabled property. Please enable the property first.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!selectedUnit || !selectedCaretakerId) {
+      toast({
+        title: "Validation Error",
+        description: "Please select a caretaker.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setLoading(true)
+      await landlordUnitService.assignCaretaker(property.id, selectedUnit.id, selectedCaretakerId)
+
+      setIsAssignCaretakerOpen(false)
+      setSelectedUnit(null)
+      setSelectedCaretakerId("")
+
+      const caretaker = availableCaretakers.find(c => c.id === selectedCaretakerId)
+      toast({
+        title: "Success!",
+        description: `${caretaker?.name} assigned to Unit ${selectedUnit.unit_number}.`,
+      })
+
+      // OPTIMIZED: Use batch loader instead of multiple API calls
+      onPropertyUpdate()
+      setTimeout(() => loadAllData(), 500)
+    } catch (error: any) {
+      console.error("Assign caretaker error:", error)
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to assign caretaker.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleRemoveTenant = async (unit: any) => {
     try {
       setLoading(true)
       await landlordUnitService.removeTenant(property.id, unit.id)
-      
+
       toast({
         title: "Success!",
         description: `Tenant removed from Unit ${unit.unit_number}.`,
       })
-      
+
       // OPTIMIZED: Use batch loader instead of multiple API calls
       onPropertyUpdate()
       setTimeout(() => loadAllData(), 500)
@@ -987,84 +1048,134 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
                           </div>
                         )}
 
-                        <div className="pt-3 border-t flex gap-2">
-                          {unit.tenant ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                              onClick={() => {
-                                if (!isUnitActive) {
-                                  toast({
-                                    title: "Unit Disabled",
-                                    description: "Cannot remove tenant from a disabled unit. Enable the unit first.",
-                                    variant: "destructive",
-                                  })
-                                  return
-                                }
-                                handleRemoveTenant(unit)
-                              }}
-                              disabled={loading || !isUnitActive}
-                              title={!isUnitActive ? "Enable unit to remove tenant" : "Remove tenant from this unit"}
-                            >
-                              <UserMinus className="w-3 h-3 mr-1" />
-                              Remove Tenant
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                              onClick={() => {
-                                if (!isPropertyActive) {
-                                  toast({
-                                    title: "Property Disabled",
-                                    description: "Enable the property first to assign tenants.",
-                                    variant: "destructive",
-                                  })
-                                  return
-                                }
-                                if (!isUnitActive) {
-                                  toast({
-                                    title: "Unit Disabled",
-                                    description: "Enable this unit first to assign tenants.",
-                                    variant: "destructive",
-                                  })
-                                  return
-                                }
-                                setSelectedUnit(unit)
-                                setIsAssignTenantOpen(true)
-                              }}
-                              disabled={loading || availableTenants.length === 0 || !isPropertyActive || !isUnitActive}
-                              title={!isPropertyActive ? "Enable property to assign tenants" : !isUnitActive ? "Enable unit to assign tenants" : availableTenants.length === 0 ? "No available tenants" : "Assign a tenant to this unit"}
-                            >
-                              <UserPlus className="w-3 h-3 mr-1" />
-                              Assign Tenant
-                            </Button>
-                          )}
-                          
-                          {/* Use the normalized isUnitActive from parent scope */}
-                          {isUnitActive ? (
-                            <button
-                              onClick={() => handleToggleUnit(unit, false)}
-                              disabled={loading}
-                              className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors disabled:opacity-50 text-xs border border-green-300"
-                              title="Click to disable unit"
-                            >
-                              <ToggleRight className="w-3 h-3" />
-                              <span>Active</span>
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleToggleUnit(unit, true)}
-                              disabled={loading}
-                              className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 hover:bg-red-200 transition-colors disabled:opacity-50 text-xs border border-red-300"
-                              title="Click to enable unit"
-                            >
-                              <ToggleLeft className="w-3 h-3" />
-                              <span>Disabled</span>
-                            </button>
-                          )}
+                        <div className="pt-3 border-t space-y-2">
+                          {/* Caretaker Assignment */}
+                          <div className="flex gap-2">
+                            {unit.caretaker ? (
+                              <div className="flex-1 flex items-center justify-between p-2 bg-blue-50 rounded border border-blue-200">
+                                <div className="flex items-center text-sm text-blue-700">
+                                  <User className="w-4 h-4 mr-2" />
+                                  <div>
+                                    <span className="font-medium">{unit.caretaker.name}</span>
+                                    <div className="text-xs text-blue-600">{unit.caretaker.email}</div>
+                                  </div>
+                                </div>
+                                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">Caretaker</span>
+                              </div>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => {
+                                  if (!isPropertyActive) {
+                                    toast({
+                                      title: "Property Disabled",
+                                      description: "Enable the property first to assign caretakers.",
+                                      variant: "destructive",
+                                    })
+                                    return
+                                  }
+                                  if (!isUnitActive) {
+                                    toast({
+                                      title: "Unit Disabled",
+                                      description: "Enable this unit first to assign caretakers.",
+                                      variant: "destructive",
+                                    })
+                                    return
+                                  }
+                                  setSelectedUnit(unit)
+                                  setIsAssignCaretakerOpen(true)
+                                }}
+                                disabled={loading || availableCaretakers.length === 0 || !isPropertyActive || !isUnitActive}
+                                title={!isPropertyActive ? "Enable property to assign caretakers" : !isUnitActive ? "Enable unit to assign caretakers" : availableCaretakers.length === 0 ? "No available caretakers" : "Assign a caretaker to this unit"}
+                              >
+                                <UserPlus className="w-3 h-3 mr-1" />
+                                Assign Caretaker
+                              </Button>
+                            )}
+                          </div>
+
+                          {/* Tenant Assignment */}
+                          <div className="flex gap-2">
+                            {unit.tenant ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 text-red-600 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => {
+                                  if (!isUnitActive) {
+                                    toast({
+                                      title: "Unit Disabled",
+                                      description: "Cannot remove tenant from a disabled unit. Enable the unit first.",
+                                      variant: "destructive",
+                                    })
+                                    return
+                                  }
+                                  handleRemoveTenant(unit)
+                                }}
+                                disabled={loading || !isUnitActive}
+                                title={!isUnitActive ? "Enable unit to remove tenant" : "Remove tenant from this unit"}
+                              >
+                                <UserMinus className="w-3 h-3 mr-1" />
+                                Remove Tenant
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                onClick={() => {
+                                  if (!isPropertyActive) {
+                                    toast({
+                                      title: "Property Disabled",
+                                      description: "Enable the property first to assign tenants.",
+                                      variant: "destructive",
+                                    })
+                                    return
+                                  }
+                                  if (!isUnitActive) {
+                                    toast({
+                                      title: "Unit Disabled",
+                                      description: "Enable this unit first to assign tenants.",
+                                      variant: "destructive",
+                                    })
+                                    return
+                                  }
+                                  setSelectedUnit(unit)
+                                  setIsAssignTenantOpen(true)
+                                }}
+                                disabled={loading || availableTenants.length === 0 || !isPropertyActive || !isUnitActive}
+                                title={!isPropertyActive ? "Enable property to assign tenants" : !isUnitActive ? "Enable unit to assign tenants" : availableTenants.length === 0 ? "No available tenants" : "Assign a tenant to this unit"}
+                              >
+                                <UserPlus className="w-3 h-3 mr-1" />
+                                Assign Tenant
+                              </Button>
+                            )}
+
+                            {/* Use the normalized isUnitActive from parent scope */}
+                            {isUnitActive ? (
+                              <button
+                                onClick={() => handleToggleUnit(unit, false)}
+                                disabled={loading}
+                                className="flex items-center gap-1 px-2 py-1 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition-colors disabled:opacity-50 text-xs border border-green-300"
+                                title="Click to disable unit"
+                              >
+                                <ToggleRight className="w-3 h-3" />
+                                <span>Active</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleToggleUnit(unit, true)}
+                                disabled={loading}
+                                className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700 hover:bg-red-200 transition-colors disabled:opacity-50 text-xs border border-red-300"
+                                title="Click to enable unit"
+                              >
+                                <ToggleLeft className="w-3 h-3" />
+                                <span>Disabled</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -1329,6 +1440,67 @@ export function PropertyDetailsModal({ property, isOpen, onClose, onPropertyUpda
                   </>
                 ) : (
                   "Assign Tenant"
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Caretaker Modal */}
+      <Dialog open={isAssignCaretakerOpen} onOpenChange={setIsAssignCaretakerOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign Caretaker to Unit {selectedUnit?.unit_number}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="caretaker-select">Select Caretaker *</Label>
+              <Select
+                value={selectedCaretakerId}
+                onValueChange={setSelectedCaretakerId}
+              >
+                <SelectTrigger id="caretaker-select">
+                  <SelectValue placeholder="Choose an available caretaker" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableCaretakers.map((caretaker) => (
+                    <SelectItem key={caretaker.id} value={caretaker.id}>
+                      {caretaker.name} - {caretaker.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {availableCaretakers.length === 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  No available caretakers. Create caretakers first or check if all caretakers are already assigned.
+                </p>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setIsAssignCaretakerOpen(false)
+                  setSelectedUnit(null)
+                  setSelectedCaretakerId("")
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-700 hover:to-cyan-700"
+                onClick={handleAssignCaretaker}
+                disabled={loading || !selectedCaretakerId}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Assigning...
+                  </>
+                ) : (
+                  "Assign Caretaker"
                 )}
               </Button>
             </div>

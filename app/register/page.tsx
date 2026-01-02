@@ -10,10 +10,13 @@ import { Separator } from "@/components/ui/separator"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Eye, EyeOff, Building2, Check, X, Info } from "lucide-react"
+import { Eye, EyeOff, Building2, Check, X, Info, AlertCircle } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
 import { toast } from "@/hooks/use-toast"
+import { authService } from "@/lib/services/auth.service"
+import { ApiClientError } from "@/lib/api-client"
+import { formatValidationErrors, getFirstValidationError } from "@/lib/api-utils"
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -28,6 +31,10 @@ export default function RegisterPage() {
     agreeToTerms: false,
   })
   const [passwordStrength, setPasswordStrength] = useState(0)
+  const [registrationSuccess, setRegistrationSuccess] = useState(false)
+  const [isResendingEmail, setIsResendingEmail] = useState(false)
+  const [registeredEmail, setRegisteredEmail] = useState("")
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const { register, isLoading: authLoading } = useAuth()
   const router = useRouter()
@@ -67,6 +74,51 @@ export default function RegisterPage() {
     return "Strong"
   }
 
+  const handleResendVerificationEmail = async () => {
+    if (!registeredEmail) {
+      console.warn("⚠️ RegisterPage - No registered email to resend")
+      return
+    }
+
+    console.log("📤 RegisterPage - Resending verification email to:", registeredEmail)
+    setIsResendingEmail(true)
+    try {
+      const response = await authService.resendVerificationEmail(registeredEmail)
+      console.log("📥 RegisterPage - Resend email response:", response)
+      console.log("📥 RegisterPage - Resend response details:", {
+        success: response?.success,
+        message: response?.message,
+        data: response?.data,
+      })
+      
+      toast({
+        title: "Email sent! 📧",
+        description: response?.message || "Verification email has been resent. Please check your inbox.",
+      })
+    } catch (error: any) {
+      console.error("❌ RegisterPage - Resend verification email error:", error)
+      console.error("❌ RegisterPage - Error details:", {
+        message: error?.message,
+        status: error?.status,
+        response: error?.response?.data,
+        errors: error?.errors,
+        isApiClientError: error instanceof ApiClientError,
+      })
+      
+      const errorMessage = error?.response?.data?.message 
+        || error?.message 
+        || "Unable to resend verification email. Please try again."
+      
+      toast({
+        title: "Failed to resend email",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setIsResendingEmail(false)
+    }
+  }
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -97,35 +149,186 @@ export default function RegisterPage() {
         password: formData.password,
         role: "landlord" as const, // Always landlord for public registration
       }
+
+      console.log("📝 RegisterPage - Registration attempt with data:", { ...registrationData, password: "***" })
+
+      // Clear any previous field errors
+      setFieldErrors({})
       
-      console.log("Registration attempt with data:", { ...registrationData, password: "***" })
-      
-      await register(registrationData)
-      
-      toast({
-        title: "Registration successful! 🎉",
-        description: "Welcome to PropertyHub! Your landlord account has been created.",
+      console.log("📤 RegisterPage - Calling register function...")
+      const response = await register(registrationData)
+      console.log("📥 RegisterPage - Register response received:", response)
+      console.log("📥 RegisterPage - Response details:", {
+        hasUser: !!response?.user,
+        hasToken: !!response?.token,
+        user: response?.user ? {
+          id: response.user.id,
+          email: response.user.email,
+          isVerified: response.user.isVerified || response.user.is_verified,
+        } : null,
+        message: response?.message,
+        success: response?.success,
       })
-      router.push("/landlord/dashboard")
+      
+      setRegisteredEmail(formData.email) // Store email for resend functionality
+
+      // The register function returns { user, token } from AuthService
+      // Check if user needs email verification
+      const user = response?.user
+      console.log("👤 RegisterPage - User from response:", user)
+      
+      if (user && !user.isVerified) {
+        setRegistrationSuccess(true)
+        toast({
+          title: "Registration successful! 🎉",
+          description: "Please check your email and verify your account before logging in.",
+        })
+      } else if (user && user.isVerified) {
+        // If user is immediately verified, redirect to dashboard
+        router.push("/landlord/dashboard")
+        toast({
+          title: "Registration successful! 🎉",
+          description: "Welcome to PropertyHub! Your landlord account has been created.",
+        })
+      } else {
+        // Fallback: assume verification is needed (most common case)
+        setRegistrationSuccess(true)
+        toast({
+          title: "Registration successful! 🎉",
+          description: "Please check your email and verify your account before logging in.",
+        })
+      }
     } catch (error: any) {
       console.error("Registration error:", error)
+      console.error("Error details:", {
+        isApiClientError: error instanceof ApiClientError,
+        status: error?.status,
+        errors: error?.errors,
+        response: error?.response?.data,
+        message: error?.message,
+      })
       
-      const errorMessage = error?.response?.data?.message 
-        || error?.message 
-        || "Unable to create account. Please try again."
+      // Check if it's an ApiClientError (from our API client)
+      const isApiClientError = error instanceof ApiClientError || error?.name === 'ApiClientError'
       
-      const validationErrors = error?.response?.data?.errors
+      // Extract validation errors - prioritize ApiClientError.errors
+      let validationErrors: Record<string, string[]> | Record<string, string> | undefined
+      
+      if (isApiClientError && error.errors) {
+        // ApiClientError stores errors directly as Record<string, string[]>
+        validationErrors = error.errors
+      } else if (error?.response?.data?.errors) {
+        // AxiosError with response data
+        validationErrors = error.response.data.errors
+      } else if (error?.errors) {
+        // Fallback to error.errors
+        validationErrors = error.errors
+      }
+      
+      // Normalize validation errors to ensure they're arrays
+      if (validationErrors) {
+        const normalized: Record<string, string[]> = {}
+        Object.keys(validationErrors).forEach((key) => {
+          const value = validationErrors[key]
+          if (Array.isArray(value)) {
+            normalized[key] = value
+          } else if (typeof value === 'string') {
+            normalized[key] = [value]
+          } else {
+            normalized[key] = [String(value)]
+          }
+        })
+        validationErrors = normalized
+      }
+      
+      // Extract error message
+      let errorMessage = "Unable to create account. Please try again."
+      if (isApiClientError && error.getFirstError) {
+        errorMessage = error.getFirstError()
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
       
       let errorDescription = errorMessage
-      if (validationErrors) {
-        const firstError = Object.values(validationErrors)[0]
-        if (Array.isArray(firstError) && firstError.length > 0) {
-          errorDescription = firstError[0] as string
+      let errorTitle = "Registration failed"
+      
+      // Handle validation errors with better user-friendly messages
+      if (validationErrors && Object.keys(validationErrors).length > 0) {
+        // Format validation errors for inline display
+        let formattedErrors: Record<string, string> = {}
+        
+        // Try using helper function first
+        try {
+          formattedErrors = formatValidationErrors(error)
+        } catch (e) {
+          // Fallback: manually format errors
+          Object.keys(validationErrors).forEach((field) => {
+            const fieldError = validationErrors[field]
+            if (Array.isArray(fieldError) && fieldError.length > 0) {
+              formattedErrors[field] = fieldError[0]
+            } else if (typeof fieldError === 'string') {
+              formattedErrors[field] = fieldError
+            }
+          })
         }
+        
+        setFieldErrors(formattedErrors)
+        
+        // Check for email already exists error
+        if (validationErrors.email) {
+          const emailError = Array.isArray(validationErrors.email) 
+            ? validationErrors.email[0] 
+            : validationErrors.email
+          
+          errorTitle = "Email Already Registered"
+          errorDescription = emailError || "This email address is already registered. Please use a different email or try logging in instead."
+        } 
+        // Check for phone already exists
+        else if (validationErrors.phone) {
+          const phoneError = Array.isArray(validationErrors.phone) 
+            ? validationErrors.phone[0] 
+            : validationErrors.phone
+          
+          errorTitle = "Phone Number Already Registered"
+          errorDescription = phoneError || "This phone number is already registered. Please use a different phone number."
+        }
+        // Handle other validation errors
+        else {
+          // Try using helper function
+          try {
+            errorDescription = getFirstValidationError(error) || errorMessage
+          } catch (e) {
+            // Fallback: manually extract first error
+            const firstErrorKey = Object.keys(validationErrors)[0]
+            const firstError = validationErrors[firstErrorKey]
+            
+            if (Array.isArray(firstError) && firstError.length > 0) {
+              errorDescription = firstError[0]
+            } else if (typeof firstError === 'string') {
+              errorDescription = firstError
+            } else {
+              errorDescription = errorMessage
+            }
+          }
+          
+          // Capitalize first letter and format field name
+          const firstErrorKey = Object.keys(validationErrors)[0]
+          if (firstErrorKey) {
+            const formattedKey = firstErrorKey.charAt(0).toUpperCase() + firstErrorKey.slice(1).replace(/_/g, ' ')
+            errorTitle = `${formattedKey} Error`
+          }
+        }
+      } else {
+        // Clear field errors if no validation errors
+        setFieldErrors({})
+        // Use the error message directly
+        errorDescription = errorMessage
       }
       
       toast({
-        title: "Registration failed",
+        title: errorTitle,
         description: errorDescription,
         variant: "destructive",
       })
@@ -218,10 +421,31 @@ export default function RegisterPage() {
                   type="email"
                   placeholder="john@example.com"
                   value={formData.email}
-                  onChange={handleInputChange}
+                  onChange={(e) => {
+                    handleInputChange(e)
+                    // Clear email error when user starts typing
+                    if (fieldErrors.email) {
+                      setFieldErrors(prev => {
+                        const newErrors = { ...prev }
+                        delete newErrors.email
+                        return newErrors
+                      })
+                    }
+                  }}
                   required
-                  className="h-11"
+                  className={`h-11 ${fieldErrors.email ? 'border-destructive' : ''}`}
+                  suppressHydrationWarning
+                  autoComplete="email"
                 />
+                {fieldErrors.email && (
+                  <div className="flex items-center gap-2 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>{fieldErrors.email}</span>
+                    <Link href="/login" className="text-primary hover:underline ml-1">
+                      Try logging in instead
+                    </Link>
+                  </div>
+                )}
               </div>
 
               {/* Phone */}
@@ -233,11 +457,28 @@ export default function RegisterPage() {
                   type="tel"
                   placeholder="0XX XXX XXXX or +233 XX XXX XXXX"
                   value={formData.phone}
-                  onChange={handlePhoneChange}
+                  onChange={(e) => {
+                    handlePhoneChange(e)
+                    // Clear phone error when user starts typing
+                    if (fieldErrors.phone) {
+                      setFieldErrors(prev => {
+                        const newErrors = { ...prev }
+                        delete newErrors.phone
+                        return newErrors
+                      })
+                    }
+                  }}
                   required
-                  className="h-11"
+                  className={`h-11 ${fieldErrors.phone ? 'border-destructive' : ''}`}
                 />
-                <p className="text-xs text-muted-foreground">Ghana format: 0XX XXX XXXX</p>
+                {fieldErrors.phone ? (
+                  <div className="flex items-center gap-2 text-sm text-destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>{fieldErrors.phone}</span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Ghana format: 0XX XXX XXXX</p>
+                )}
               </div>
 
               {/* Address */}
@@ -432,6 +673,45 @@ export default function RegisterPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Registration Success Modal */}
+        {registrationSuccess && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-xl max-w-md mx-4 text-center">
+              <div className="text-6xl mb-4">📧</div>
+              <h2 className="text-2xl font-bold text-green-600 mb-2">Registration Successful!</h2>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
+                Your landlord account has been created. Please check your email and click the verification link to activate your account.
+              </p>
+              <div className="space-y-3">
+                <Button
+                  onClick={() => router.push("/login")}
+                  className="w-full"
+                >
+                  Go to Login
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleResendVerificationEmail}
+                  disabled={isResendingEmail}
+                  className="w-full"
+                >
+                  {isResendingEmail ? "Sending..." : "Resend Verification Email"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => setRegistrationSuccess(false)}
+                  className="w-full"
+                >
+                  Register Another Account
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
+                Didn't receive the email? Check your spam folder or use the resend button above.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Footer Info */}
         <div className="text-center text-xs text-muted-foreground space-y-2">

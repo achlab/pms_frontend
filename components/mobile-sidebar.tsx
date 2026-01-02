@@ -82,7 +82,7 @@ const getNavigationForRole = (role: string) => {
       },
       {
         name: "Maintenance",
-        href: "/maintenance-requests",
+        href: "/maintenance",
         icon: Wrench,
       },
       {
@@ -117,7 +117,7 @@ const getNavigationForRole = (role: string) => {
       },
       {
         name: "Maintenance",
-        href: "/maintenance-requests",
+        href: "/maintenance",
         icon: Wrench,
       },
       {

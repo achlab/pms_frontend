@@ -19,6 +19,7 @@ interface UseMutationResult<TData, TVariables> {
   data: TData | null;
   error: unknown;
   isLoading: boolean;
+  isPending: boolean;
   isError: boolean;
   isSuccess: boolean;
   reset: () => void;
@@ -100,6 +101,7 @@ export function useApiMutation<TData = any, TVariables = any>(
     data,
     error,
     isLoading,
+    isPending: isLoading, // Alias for isLoading
     isError,
     isSuccess,
     reset,

@@ -63,6 +63,23 @@ class PaymentService {
   }
 
   /**
+   * Create a new payment record (general payment creation)
+   */
+  async createPayment(data: {
+    tenant_id: string;
+    unit_id: string;
+    property_id: string;
+    invoice_id?: string;
+    amount: number;
+    payment_method: string;
+    payment_date: string;
+    reference_number?: string;
+    notes?: string;
+  }): Promise<ApiResponse<Payment>> {
+    return apiClient.post<ApiResponse<Payment>>('/payments', data);
+  }
+
+  /**
    * Update payment status (landlord confirms/rejects)
    */
   async updatePaymentStatus(

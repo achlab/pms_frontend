@@ -199,6 +199,16 @@ class LandlordUnitService {
   }
 
   /**
+   * Get single unit with full details by unit ID only
+   * 
+   * @param unitId - UUID of the unit
+   * @returns Unit with full details
+   */
+  async getUnitDetails(unitId: string): Promise<ApiResponse<LandlordUnit>> {
+    return apiClient.get<ApiResponse<LandlordUnit>>(`/units/${unitId}`);
+  }
+
+  /**
    * Get single unit with full details
    * 
    * @param propertyId - UUID of the property

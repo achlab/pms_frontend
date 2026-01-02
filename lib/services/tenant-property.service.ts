@@ -5,7 +5,7 @@
  */
 
 import apiClient from "../api-client";
-import type { ApiResponse, Property, PropertyUnit } from "../api-types";
+import type { ApiResponse, Property, Unit } from "../api-types";
 
 class TenantPropertyService {
   private static instance: TenantPropertyService;
@@ -34,8 +34,8 @@ class TenantPropertyService {
    * @param propertyId - UUID of the property
    * @returns List of units the tenant has access to
    */
-  async getPropertyUnits(propertyId: string): Promise<ApiResponse<PropertyUnit[]>> {
-    return apiClient.get<ApiResponse<PropertyUnit[]>>(`/properties/${propertyId}/units`);
+  async getPropertyUnits(propertyId: string): Promise<ApiResponse<Unit[]>> {
+    return apiClient.get<ApiResponse<Unit[]>>(`/properties/${propertyId}/units`);
   }
 
   /**
@@ -44,11 +44,11 @@ class TenantPropertyService {
    */
   async getTenantUnit(): Promise<ApiResponse<{
     property: Property;
-    unit: PropertyUnit;
+    unit: Unit;
   }>> {
     return apiClient.get<ApiResponse<{
       property: Property;
-      unit: PropertyUnit;
+      unit: Unit;
     }>>("/tenant/unit");
   }
 }
