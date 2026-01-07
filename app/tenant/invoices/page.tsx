@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { MainLayout } from "@/components/main-layout";
 import { InvoiceList } from "@/components/invoice/invoice-list";
 import { InvoiceListSkeleton } from "@/components/ui/loading-skeleton";
@@ -13,14 +13,17 @@ import { AlertCircle, FileText, RefreshCw, ArrowLeft, CreditCard, Loader2, Camer
 import { toast } from "sonner";
 import paymentService from "@/lib/services/payment.service";
 import { getErrorMessage } from "@/lib/api-utils";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { useInvoices } from "@/lib/hooks/use-invoice";
-import type { InvoiceStatus, InvoiceType } from "@/lib/api-types";
+import type { InvoiceStatus, InvoiceType, Payment } from "@/lib/api-types";
+import { PaymentHistoryList } from "@/components/payments/payment-history-list";
 
 export default function TenantInvoicesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
+  const isTenantUser = user?.role === "tenant";
   const [currentPage, setCurrentPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | undefined>();
   const [typeFilter, setTypeFilter] = useState<InvoiceType | undefined>();
@@ -28,7 +31,8 @@ export default function TenantInvoicesPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<typeof invoices[0] | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [receiptImages, setReceiptImages] = useState<string[]>([]);
+  const [receiptPreviews, setReceiptPreviews] = useState<{ url: string; type: "image" | "pdf"; name: string }[]>([]);
+  const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const [paymentData, setPaymentData] = useState({
@@ -43,6 +47,12 @@ export default function TenantInvoicesPage() {
     payment_method: "",
     payment_date: "",
   });
+  const [paymentHistory, setPaymentHistory] = useState<Payment[]>([]);
+  const [paymentHistoryLoading, setPaymentHistoryLoading] = useState(false);
+
+  const MAX_ATTACHMENTS = 5;
+  const MAX_FILE_SIZE_MB = 10;
+  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
   const { data, isLoading, error, refetch, isFetching } = useInvoices({
     status: statusFilter,
@@ -52,17 +62,40 @@ export default function TenantInvoicesPage() {
     refetchInterval: 15000, // Auto-refresh every 15 seconds to sync landlord updates
   });
 
-  // Redirect if not a tenant
-  if (!user || user.role !== "tenant") {
-    return (
-      <MainLayout>
-        <div className="p-8">
-          <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>
-          <p className="mt-2 text-gray-600">You do not have permission to access this page.</p>
-        </div>
-      </MainLayout>
-    );
-  }
+  const invoices = data?.data || [];
+
+  // Handle invoiceId from query parameter (from notification click)
+  useEffect(() => {
+    const invoiceIdFromQuery = searchParams.get('invoiceId');
+    if (invoiceIdFromQuery && invoices.length > 0) {
+      const invoice = invoices.find((inv: any) => inv.id === invoiceIdFromQuery);
+      if (invoice) {
+        // Open payment modal for the invoice
+        setSelectedInvoice(invoice);
+        setPaymentData({
+          amount: invoice.outstanding_balance.toString(),
+          payment_method: "",
+          payment_date: new Date().toISOString().split("T")[0],
+          reference_number: "",
+          notes: "",
+        });
+        setFormErrors({
+          amount: "",
+          payment_method: "",
+          payment_date: "",
+        });
+        setReceiptPreviews([]);
+        setReceiptFiles([]);
+        setShowPaymentModal(true);
+        
+        // Remove invoiceId from URL to clean it up
+        const newSearchParams = new URLSearchParams(searchParams.toString());
+        newSearchParams.delete('invoiceId');
+        const newUrl = newSearchParams.toString() ? `/tenant/invoices?${newSearchParams.toString()}` : '/tenant/invoices';
+        router.replace(newUrl);
+      }
+    }
+  }, [searchParams, invoices, router]);
 
   const handleFilterChange = (filters: {
     status?: InvoiceStatus;
@@ -75,26 +108,93 @@ export default function TenantInvoicesPage() {
     setCurrentPage(1); // Reset to first page when filters change
   };
 
-  // Image handling functions
+  const loadPaymentHistory = useCallback(async () => {
+    if (!isTenantUser) return;
+    setPaymentHistoryLoading(true);
+    try {
+      const response = await paymentService.getPaymentHistory({ per_page: 20 });
+      setPaymentHistory(response.data || []);
+    } catch (error) {
+      console.error("Failed to load payment history:", error);
+      toast.error("Failed to load payment history");
+    } finally {
+      setPaymentHistoryLoading(false);
+    }
+  }, [isTenantUser]);
+
+  useEffect(() => {
+    loadPaymentHistory();
+  }, [loadPaymentHistory]);
+
+  // Redirect if not a tenant
+  if (!isTenantUser) {
+    return (
+      <MainLayout>
+        <div className="p-8">
+          <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>
+          <p className="mt-2 text-gray-600">You do not have permission to access this page.</p>
+        </div>
+      </MainLayout>
+    );
+  }
+
+  // Attachment handling
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 
+    let currentCount = receiptFiles.length;
+    const filesToAdd: File[] = [];
+    const previewsToAdd: { url: string; type: "image" | "pdf"; name: string }[] = [];
+
     Array.from(files).forEach((file) => {
-      if (file.type.startsWith("image/")) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setReceiptImages((prev) => [...prev, reader.result as string]);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        toast.error("Please upload only image files");
+      if (currentCount >= MAX_ATTACHMENTS) {
+        toast.error(`You can upload up to ${MAX_ATTACHMENTS} attachments.`);
+        return;
       }
+
+      const isImage = file.type.startsWith("image/");
+      const isPdf = file.type === "application/pdf";
+
+      if (!isImage && !isPdf) {
+        toast.error("Only image or PDF files are allowed.");
+        return;
+      }
+
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        toast.error(`"${file.name}" exceeds the ${MAX_FILE_SIZE_MB}MB limit.`);
+        return;
+      }
+
+      currentCount += 1;
+      filesToAdd.push(file);
+      previewsToAdd.push({
+        url: URL.createObjectURL(file),
+        type: isPdf ? "pdf" : "image",
+        name: file.name,
+      });
     });
+
+    if (filesToAdd.length > 0) {
+      setReceiptFiles((prev) => [...prev, ...filesToAdd]);
+      setReceiptPreviews((prev) => [...prev, ...previewsToAdd]);
+    }
+
+    // Allow re-uploading the same file
+    e.target.value = "";
   };
 
-  const removeImage = (index: number) => {
-    setReceiptImages((prev) => prev.filter((_, i) => i !== index));
+  const removeAttachment = (index: number) => {
+    setReceiptPreviews((prev) => {
+      const next = [...prev];
+      const [removed] = next.splice(index, 1);
+      if (removed?.url) {
+        URL.revokeObjectURL(removed.url);
+      }
+      return next;
+    });
+
+    setReceiptFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Validation function
@@ -146,10 +246,15 @@ export default function TenantInvoicesPage() {
       payment_method: "",
       payment_date: "",
     });
-    setReceiptImages([]);
+    receiptPreviews.forEach((preview) => {
+      if (preview.url) {
+        URL.revokeObjectURL(preview.url);
+      }
+    });
+    setReceiptPreviews([]);
+    setReceiptFiles([]);
   };
 
-  const invoices = data?.data || [];
   const summary = data?.summary;
 
   if (isLoading) {
@@ -160,6 +265,13 @@ export default function TenantInvoicesPage() {
             <InvoiceListSkeleton />
           </div>
         </div>
+
+        <PaymentHistoryList
+          payments={paymentHistory}
+          loading={paymentHistoryLoading}
+          title="My Payment History"
+          emptyMessage="You have not submitted any payments yet."
+        />
       </MainLayout>
     );
   }
@@ -258,7 +370,7 @@ export default function TenantInvoicesPage() {
           {/* Invoice List */}
           <InvoiceList
             invoices={invoices}
-            onViewDetails={(id) => router.push(`/invoices/${id}`)}
+            onViewDetails={(id) => router.push(`/tenant/invoices/${id}`)}
             onRecordPayment={(id) => {
               const invoice = invoices.find(inv => inv.id === id);
               if (invoice) {
@@ -277,6 +389,7 @@ export default function TenantInvoicesPage() {
               }
             }}
             onFilterChange={handleFilterChange}
+            actionLabel="Submit Evidence"
           />
 
           {invoices.length === 0 && !isLoading && (
@@ -297,7 +410,7 @@ export default function TenantInvoicesPage() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <CreditCard className="h-5 w-5" />
-                  Record Payment for Invoice {selectedInvoice?.invoice_number}
+                  Submit Payment Evidence for Invoice {selectedInvoice?.invoice_number}
                 </DialogTitle>
               </DialogHeader>
 
@@ -325,7 +438,12 @@ export default function TenantInvoicesPage() {
                     </div>
                   </div>
 
-                  {/* Payment Form */}
+                  {/* Guidance */}
+                  <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-900 dark:text-amber-100">
+                    Submit the details and receipt of your offline payment. Your landlord will review the evidence and record it against this invoice.
+                  </div>
+
+                  {/* Payment Evidence Form */}
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <Label htmlFor="amount" className="text-sm font-medium">
@@ -447,7 +565,7 @@ export default function TenantInvoicesPage() {
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/*"
+                        accept="image/*,application/pdf"
                         multiple
                         onChange={handleFileUpload}
                         className="hidden"
@@ -484,22 +602,31 @@ export default function TenantInvoicesPage() {
                         </Button>
                       </div>
 
-                      {/* Image Previews */}
-                      {receiptImages.length > 0 && (
+                      {/* Attachment Previews */}
+                      {receiptPreviews.length > 0 && (
                         <div className="grid grid-cols-2 gap-2 mt-3">
-                          {receiptImages.map((image, index) => (
+                          {receiptPreviews.map((preview, index) => (
                             <div key={index} className="relative group">
-                              <img
-                                src={image}
-                                alt={`Receipt ${index + 1}`}
-                                className="w-full h-32 object-cover rounded-lg border"
-                              />
+                              {preview.type === "image" ? (
+                                <img
+                                  src={preview.url}
+                                  alt={`Receipt ${index + 1}`}
+                                  className="w-full h-32 object-cover rounded-lg border"
+                                />
+                              ) : (
+                                <div className="w-full h-32 rounded-lg border bg-gray-50 flex flex-col items-center justify-center text-gray-600">
+                                  <FileText className="h-8 w-8 mb-2" />
+                                  <span className="text-xs text-center px-2 break-words">
+                                    {preview.name || "PDF Attachment"}
+                                  </span>
+                                </div>
+                              )}
                               <Button
                                 type="button"
                                 variant="destructive"
                                 size="icon"
                                 className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={() => removeImage(index)}
+                                onClick={() => removeAttachment(index)}
                               >
                                 <X className="h-4 w-4" />
                               </Button>
@@ -508,7 +635,7 @@ export default function TenantInvoicesPage() {
                         </div>
                       )}
                       <p className="text-xs text-muted-foreground">
-                        Upload receipt images for verification (optional)
+                        Upload receipt images or PDF documents (max {MAX_ATTACHMENTS} files, {MAX_FILE_SIZE_MB}MB each)
                       </p>
                     </div>
                   </div>
@@ -528,7 +655,7 @@ export default function TenantInvoicesPage() {
                 </Button>
                 <Button
                   onClick={async () => {
-                    console.log("🔵 Record Payment button clicked");
+                    console.log("🔵 Submit Payment Evidence button clicked");
                     console.log("📋 Selected Invoice:", selectedInvoice);
                     console.log("💳 Payment Data:", paymentData);
                     
@@ -545,29 +672,31 @@ export default function TenantInvoicesPage() {
                       return;
                     }
 
-                    const paymentPayload = {
-                      tenant_id: selectedInvoice.tenant.id,
-                      unit_id: selectedInvoice.unit.id,
-                      property_id: selectedInvoice.property.id,
-                      invoice_id: selectedInvoice.id,
-                      amount: parseFloat(paymentData.amount),
-                      payment_method: paymentData.payment_method,
-                      payment_date: paymentData.payment_date,
-                      reference_number: paymentData.reference_number || undefined,
-                      notes: paymentData.notes || undefined,
-                    };
+                    const formData = new FormData();
+                    formData.append("tenant_id", selectedInvoice.tenant.id);
+                    formData.append("unit_id", selectedInvoice.unit.id);
+                    formData.append("property_id", selectedInvoice.property.id);
+                    formData.append("amount", paymentData.amount);
+                    formData.append("payment_method", paymentData.payment_method);
+                    formData.append("payment_date", paymentData.payment_date);
+                    if (paymentData.reference_number) {
+                      formData.append("reference_number", paymentData.reference_number);
+                    }
+                    if (paymentData.notes) {
+                      formData.append("notes", paymentData.notes);
+                    }
+                    receiptFiles.forEach((file) => formData.append("attachments[]", file));
 
-                    console.log("📤 Sending payment payload:", paymentPayload);
+                    console.log("📤 Sending payment evidence form data:", Array.from(formData.entries()));
 
                     try {
                       setIsSubmitting(true);
-                      console.log("⏳ Submitting payment...");
+                      console.log("⏳ Submitting payment evidence...");
 
-                      // Submit payment
-                      const response = await paymentService.createPayment(paymentPayload);
+                      const response = await paymentService.submitPaymentEvidence(selectedInvoice.id, formData);
                       
-                      console.log("✅ Payment response:", response);
-                      toast.success("Payment submitted! Awaiting landlord verification.");
+                      console.log("✅ Payment evidence response:", response);
+                      toast.success("Payment evidence submitted! Await landlord verification.");
                       setShowPaymentModal(false);
                       
                       // Reset form
@@ -575,6 +704,7 @@ export default function TenantInvoicesPage() {
 
                       // Refresh invoice list to show updated status
                       await refetch();
+                      await loadPaymentHistory();
                     } catch (error: any) {
                       console.error("❌ Payment submission error:", error);
                       console.error("Error details:", {
@@ -582,10 +712,10 @@ export default function TenantInvoicesPage() {
                         response: error?.response,
                         stack: error?.stack
                       });
-                      toast.error(error?.message || "Failed to record payment");
+                      toast.error(error?.message || "Failed to submit payment evidence");
                     } finally {
                       setIsSubmitting(false);
-                      console.log("🏁 Payment submission complete");
+                      console.log("🏁 Payment evidence submission complete");
                     }
                   }}
                   disabled={isSubmitting}
@@ -593,12 +723,12 @@ export default function TenantInvoicesPage() {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Recording...
+                      Submitting...
                     </>
                   ) : (
                     <>
                       <CreditCard className="h-4 w-4 mr-2" />
-                      Record Payment
+                      Submit Evidence
                     </>
                   )}
                 </Button>

@@ -164,6 +164,44 @@ class LandlordUnitService {
   }
 
   /**
+   * Remove caretaker from unit (unassign)
+   * Uses the same PATCH endpoint as assignment, but with caretaker_id set to null
+   * 
+   * @param propertyId - UUID of the property
+   * @param unitId - UUID of the unit
+   * @returns Updated unit
+   */
+  async removeCaretaker(
+    propertyId: string,
+    unitId: string
+  ): Promise<ApiResponse<LandlordUnit>> {
+    // Use PATCH endpoint with caretaker_id: null to remove caretaker
+    // Same endpoint as assignment: PATCH /api/properties/{propertyId}/units/{unitId}/assign
+    // Explicitly set caretaker_id to null and ensure tenant_id is not affected
+    const requestData: AssignUnitRequest = { 
+      caretaker_id: null 
+    };
+    
+    console.log("🔴 Removing caretaker - Request payload:", {
+      propertyId,
+      unitId,
+      requestData,
+      endpoint: `/properties/${propertyId}/units/${unitId}/assign`
+    });
+    
+    const response = await this.assignUnit(propertyId, unitId, requestData);
+    
+    console.log("🟢 Remove caretaker response:", {
+      success: response.success,
+      hasCaretaker: response.data?.caretaker !== null && response.data?.caretaker !== undefined,
+      caretakerId: response.data?.caretaker_id || response.data?.caretaker?.id,
+      fullResponse: response
+    });
+    
+    return response;
+  }
+
+  /**
    * Disable unit
    * 
    * @param propertyId - UUID of the property

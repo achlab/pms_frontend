@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +31,13 @@ interface RecordPaymentModalProps {
   invoiceNumber: string;
   outstandingBalance: number;
   onSuccess?: () => void;
+  defaultValues?: {
+    amount?: number;
+    payment_method?: PaymentMethod;
+    payment_reference?: string;
+    payment_date?: string;
+    notes?: string;
+  };
 }
 
 export function RecordPaymentModal({
@@ -40,12 +47,27 @@ export function RecordPaymentModal({
   invoiceNumber,
   outstandingBalance,
   onSuccess,
+  defaultValues,
 }: RecordPaymentModalProps) {
   const [amount, setAmount] = useState(outstandingBalance.toString());
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("mobile_money");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentDate, setPaymentDate] = useState(formatDateForApi(new Date()));
   const [notes, setNotes] = useState("");
+  useEffect(() => {
+    if (isOpen) {
+      setAmount(
+        defaultValues?.amount !== undefined
+          ? defaultValues.amount.toString()
+          : outstandingBalance.toString()
+      );
+      setPaymentMethod(defaultValues?.payment_method ?? "cash");
+      setPaymentReference(defaultValues?.payment_reference ?? "");
+      setPaymentDate(defaultValues?.payment_date ?? formatDateForApi(new Date()));
+      setNotes(defaultValues?.notes ?? "");
+    }
+  }, [isOpen, defaultValues, outstandingBalance]);
+
 
   const { mutate: recordPayment, isLoading } = useRecordPayment();
 

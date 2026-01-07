@@ -86,19 +86,11 @@ export function MaintenanceRequestList({
 
   return (
     <div className="space-y-4">
-      {/* Filters & Create Button */}
+      {/* Filters */}
       <div className="bg-white dark:bg-slate-800 rounded-lg border p-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Filter className="h-5 w-5 text-muted-foreground" />
-            <h3 className="font-semibold">Filters</h3>
-          </div>
-          {onCreateNew && user?.role === "tenant" && (
-            <Button onClick={onCreateNew}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Request
-            </Button>
-          )}
+        <div className="flex items-center gap-2 mb-4">
+          <Filter className="h-5 w-5 text-muted-foreground" />
+          <h3 className="font-semibold">Filters</h3>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -125,12 +117,11 @@ export function MaintenanceRequestList({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="received">Received</SelectItem>
-              <SelectItem value="assigned">Assigned</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
-              <SelectItem value="pending_approval">Pending Approval</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="under_review">Under Review</SelectItem>
               <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="resolved">Resolved</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
               <SelectItem value="closed">Closed</SelectItem>
             </SelectContent>
           </Select>

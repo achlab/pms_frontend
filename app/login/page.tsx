@@ -291,8 +291,8 @@ export default function LoginPage() {
           </Alert>
         )}
 
-        {/* Unverified User Alert */}
-        {user && !user.isVerified && (
+        {/* Unverified User Alert - Only show if explicitly unverified */}
+        {user && (user.isVerified === false || (user.is_verified === false && !user.email_verified_at)) && (
           <Alert className="border-orange-200 bg-orange-50 dark:bg-orange-950 dark:border-orange-800">
             <AlertCircle className="h-4 w-4 text-orange-600 dark:text-orange-400" />
             <AlertDescription className="text-sm text-orange-800 dark:text-orange-200">

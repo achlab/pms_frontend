@@ -36,6 +36,11 @@ const getNavigationForRole = (role: string) => {
         icon: LayoutDashboard,
       },
       {
+        name: "Maintenance",
+        href: "/admin/maintenance",
+        icon: Wrench,
+      },
+      {
         name: "User Management",
         href: "/admin/users",
         icon: Users,
@@ -97,7 +102,7 @@ const getNavigationForRole = (role: string) => {
     return [
       {
         name: "Dashboard",
-        href: "/dashboard",
+        href: "/tenant/dashboard",
         icon: LayoutDashboard,
       },
       {
@@ -116,6 +121,11 @@ const getNavigationForRole = (role: string) => {
         icon: DollarSign,
       },
       {
+        name: "Invoices",
+        href: "/tenant/invoices",
+        icon: Receipt,
+      },
+      {
         name: "Maintenance",
         href: "/maintenance",
         icon: Wrench,
@@ -123,7 +133,7 @@ const getNavigationForRole = (role: string) => {
       {
         name: "Payments",
         href: "/payments-invoices",
-        icon: Receipt,
+        icon: CreditCard,
       },
       {
         name: "Profile",
@@ -137,37 +147,37 @@ const getNavigationForRole = (role: string) => {
   return [
     {
       name: "Dashboard",
-      href: "/dashboard",
+      href: "/landlord/dashboard",
       icon: LayoutDashboard,
     },
     {
       name: "Properties",
-      href: "/properties",
+      href: "/landlord/properties",
       icon: Building2,
     },
     {
       name: "Finance",
-      href: "/finance",
+      href: "/landlord/finance",
       icon: DollarSign,
     },
     {
       name: "Reports",
-      href: "/reports",
+      href: "/landlord/reports",
       icon: BarChart3,
     },
     {
       name: "Tenants",
-      href: "/tenants",
+      href: "/landlord/tenants",
       icon: UserCheck,
     },
     {
       name: "Maintenance",
-      href: "/maintenance",
+      href: "/landlord/maintenance",
       icon: Wrench,
     },
     {
       name: "Profile",
-      href: "/profile",
+      href: "/landlord/profile",
       icon: User,
     },
   ]

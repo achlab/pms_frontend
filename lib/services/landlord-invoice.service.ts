@@ -263,7 +263,8 @@ class LandlordInvoiceService {
     total_outstanding: number;
     collection_rate: number;
   }>> {
-    return apiClient.get("/invoices/statistics");
+    const cacheBuster = Date.now();
+    return apiClient.get(`/invoices/statistics?_=${cacheBuster}`);
   }
 
   /**
@@ -282,8 +283,9 @@ class LandlordInvoiceService {
     collected_amount: number;
     outstanding_amount: number;
   }>> {
+    const cacheBuster = Date.now();
     return apiClient.get(
-      `/invoices/statistics?start_date=${startDate}&end_date=${endDate}`
+      `/invoices/statistics?start_date=${startDate}&end_date=${endDate}&_=${cacheBuster}`
     );
   }
 

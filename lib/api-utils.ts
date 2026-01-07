@@ -130,12 +130,24 @@ export function isNetworkError(error: unknown): boolean {
 
 /**
  * Build query string from params object
+ * Handles array parameters (e.g., status[]=pending&status[]=approved)
  */
 export function buildQueryString(params: Record<string, any>): string {
   const searchParams = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+
+    // Handle array parameters (e.g., status[], priority[])
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        if (item !== undefined && item !== null && item !== "") {
+          searchParams.append(key, String(item));
+        }
+      });
+    } else {
       searchParams.append(key, String(value));
     }
   });
@@ -351,6 +363,8 @@ export function getStatusColor(status: string): string {
     in_progress: "yellow",
     pending_approval: "orange",
     approved: "green",
+    completed_pending_review: "green",
+    awaiting_tenant_confirmation: "indigo",
     resolved: "green",
     closed: "gray",
 
@@ -386,6 +400,8 @@ export function formatStatus(status?: string | null): string {
     'failed': 'Failed / Rejected',
     'paid': 'Paid',
     'overdue': 'Overdue',
+    'completed_pending_review': 'Pending Review',
+    'awaiting_tenant_confirmation': 'Awaiting Tenant Confirmation',
   };
   
   return statusLabels[status] || status

@@ -22,9 +22,10 @@ import type { MaintenancePriority } from "@/lib/api-types";
 interface CreateRequestFormProps {
   onSuccess?: (requestId: string) => void;
   onCancel?: () => void;
+  compact?: boolean; // If true, renders in a more compact format for modals
 }
 
-export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProps) {
+export function CreateRequestForm({ onSuccess, onCancel, compact = false }: CreateRequestFormProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<MaintenancePriority>("normal");
@@ -176,13 +177,8 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
     }
   };
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Create Maintenance Request</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+  const formContent = (
+    <form onSubmit={handleSubmit} className="space-y-4">
           {/* Title */}
           <div className="space-y-2">
             <div className="flex justify-between items-center">
@@ -435,8 +431,8 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
               <div className="text-sm text-blue-900 dark:text-blue-100">
                 <p className="font-medium">What happens next?</p>
                 <p className="mt-1">
-                  Your request will be reviewed by your landlord and assigned to a caretaker.
-                  You'll receive updates via notifications.
+                  Your request will start as <strong>Pending</strong> and be reviewed by your landlord.
+                  Once approved, it will be assigned to a caretaker or artisan. You'll receive updates via notifications at each step.
                 </p>
               </div>
             </div>
@@ -454,6 +450,19 @@ export function CreateRequestForm({ onSuccess, onCancel }: CreateRequestFormProp
             </Button>
           </div>
         </form>
+  );
+
+  if (compact) {
+    return formContent;
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Create Maintenance Request</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {formContent}
       </CardContent>
     </Card>
   );

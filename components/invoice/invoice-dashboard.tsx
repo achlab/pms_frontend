@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,14 +31,20 @@ import {
   Building,
   Calendar,
   RefreshCw,
-  CreditCard
+  CreditCard,
+  Eye,
+  Paperclip,
+  Receipt
 } from "lucide-react";
 import { toast } from "sonner";
 import { landlordInvoiceService } from "@/lib/services/landlord-invoice.service";
 import { caretakerInvoiceService } from "@/lib/services/caretaker-invoice.service";
 import { landlordPropertyService } from "@/lib/services/landlord-property.service";
 import { caretakerPropertyService } from "@/lib/services/caretaker-property.service";
-import type { Invoice, InvoiceStatistics, BulkInvoiceGenerationRequest, InvoiceStatus, InvoiceType, LandlordProperty, CaretakerProperty } from "@/lib/api-types";
+import { paymentService } from "@/lib/services/payment.service";
+import type { Invoice, InvoiceStatistics, BulkInvoiceGenerationRequest, InvoiceStatus, InvoiceType, LandlordProperty, CaretakerProperty, PaymentEvidence, PaymentMethod } from "@/lib/api-types";
+import { InvoicePaymentHistoryModal } from "@/components/payments/invoice-payment-history-modal";
+import { buildInvoiceSummary } from "@/lib/utils/invoice-summary";
 
 interface InvoiceDashboardProps {
   userRole: "landlord" | "caretaker" | "tenant";
@@ -71,6 +77,14 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
   const [selectedInvoiceNumber, setSelectedInvoiceNumber] = useState<string>("");
   const [selectedInvoiceBalance, setSelectedInvoiceBalance] = useState<number>(0);
+  const [recordPaymentDefaults, setRecordPaymentDefaults] = useState<{
+    amount?: number;
+    payment_method?: PaymentMethod;
+    payment_reference?: string;
+    payment_date?: string;
+    notes?: string;
+  } | null>(null);
+  const [pendingEvidenceId, setPendingEvidenceId] = useState<string | null>(null);
   
   // Select invoice modal
   const [isSelectInvoiceModalOpen, setIsSelectInvoiceModalOpen] = useState(false);
@@ -80,10 +94,28 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
     period_start: new Date().toISOString().split('T')[0],
     period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
   });
+  const [showInvoicePaymentsModal, setShowInvoicePaymentsModal] = useState(false);
+  const [historyInvoiceId, setHistoryInvoiceId] = useState<string | null>(null);
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<string[]>([]);
   const [availableUnits, setAvailableUnits] = useState<any[]>([]);
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
   const [generationMode, setGenerationMode] = useState<"properties" | "units">("properties");
+
+  // Payment evidence tracking (landlord)
+  const [pendingEvidence, setPendingEvidence] = useState<PaymentEvidence[]>([]);
+  const [processedEvidence, setProcessedEvidence] = useState<PaymentEvidence[]>([]);
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
+  const [selectedEvidence, setSelectedEvidence] = useState<PaymentEvidence | null>(null);
+  const [isEvidenceReadonly, setIsEvidenceReadonly] = useState(false);
+
+  const summaryMetrics = useMemo(
+    () => buildInvoiceSummary(invoices, statistics ?? undefined),
+    [invoices, statistics]
+  );
+  const collectionRateDisplay = Number.isFinite(summaryMetrics.collectionRate)
+    ? summaryMetrics.collectionRate
+    : 0;
 
   // Get appropriate services based on user role
   const getInvoiceService = useCallback(() => {
@@ -156,6 +188,28 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
     }
   }, [getInvoiceService, getPropertyService, statusFilter, typeFilter, searchQuery, dateRange]);
 
+  const fetchPaymentEvidence = useCallback(async () => {
+    if (userRole !== "landlord") return;
+    setEvidenceLoading(true);
+    try {
+      const [pendingResp, processedResp] = await Promise.all([
+        paymentService.getPaymentEvidence({ status: "pending" }),
+        paymentService.getPaymentEvidence({ status: "approved" }),
+      ]);
+
+      console.log("📥 Pending evidence:", pendingResp);
+      console.log("📥 Processed evidence:", processedResp);
+
+      setPendingEvidence(pendingResp.data || []);
+      setProcessedEvidence(processedResp.data || []);
+    } catch (error) {
+      console.error("Failed to load payment evidence:", error);
+      toast.error("Failed to load payment evidence");
+    } finally {
+      setEvidenceLoading(false);
+    }
+  }, [userRole]);
+
   // Refresh data
   const refreshData = useCallback(async () => {
     setRefreshing(true);
@@ -168,6 +222,8 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
   const handleRecordPayment = (invoiceId: string) => {
     const invoice = invoices.find(inv => inv.id === invoiceId);
     if (invoice) {
+      setPendingEvidenceId(null);
+      setRecordPaymentDefaults(null);
       setSelectedInvoiceId(invoiceId);
       setSelectedInvoiceNumber(invoice.invoice_number);
       setSelectedInvoiceBalance(invoice.outstanding_balance);
@@ -177,16 +233,78 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
 
   // Handle select invoice for payment
   const handleSelectInvoiceForPayment = (invoice: any) => {
+    setPendingEvidenceId(null);
+    setRecordPaymentDefaults(null);
     setSelectedInvoiceId(invoice.id);
     setSelectedInvoiceNumber(invoice.invoice_number);
     setSelectedInvoiceBalance(invoice.outstanding_balance);
     setIsPaymentModalOpen(true);
   };
 
+  const handleViewInvoicePayments = (invoiceId: string) => {
+    setHistoryInvoiceId(invoiceId);
+    setShowInvoicePaymentsModal(true);
+  };
+
+  const handleReviewEvidence = (evidence: PaymentEvidence) => {
+    setSelectedEvidence(evidence);
+    setIsEvidenceReadonly(evidence.status !== "pending");
+    setEvidenceModalOpen(true);
+  };
+
+  const handleApproveEvidence = (evidence: PaymentEvidence) => {
+    setEvidenceModalOpen(false);
+
+    if (!evidence.invoice?.id) {
+      toast.error("Invoice information is missing for this evidence.");
+      return;
+    }
+
+    setRecordPaymentDefaults({
+      amount: evidence.amount,
+      payment_method: evidence.payment_method,
+      payment_reference: evidence.reference_number,
+      payment_date: evidence.payment_date,
+      notes: evidence.notes,
+    });
+
+    setPendingEvidenceId(evidence.id);
+    setSelectedInvoiceId(evidence.invoice.id);
+    setSelectedInvoiceNumber(evidence.invoice.invoice_number);
+    setSelectedInvoiceBalance(
+      evidence.invoice.outstanding_balance ??
+        evidence.invoice.total_amount ??
+        evidence.amount
+    );
+    setIsPaymentModalOpen(true);
+  };
+
+  const handlePaymentSuccess = useCallback(async () => {
+    await refreshData();
+    if (pendingEvidenceId) {
+      try {
+        const response = await paymentService.approvePaymentEvidence(pendingEvidenceId);
+        console.log("✅ Payment evidence approved:", response);
+        toast.success("Payment evidence approved");
+        await fetchPaymentEvidence();
+      } catch (error) {
+        console.error("Failed to approve payment evidence:", error);
+        toast.error("Payment recorded, but evidence approval failed");
+      } finally {
+        setPendingEvidenceId(null);
+        setRecordPaymentDefaults(null);
+      }
+    }
+  }, [pendingEvidenceId, refreshData, fetchPaymentEvidence]);
+
   // Initial load
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    fetchPaymentEvidence();
+  }, [fetchPaymentEvidence]);
 
   // Load units for selected properties
   const loadUnitsForProperties = useCallback(async (propertyIds: string[]) => {
@@ -343,6 +461,36 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
       style: 'currency',
       currency: 'GHS'
     }).format(amount);
+  };
+
+  const formatDateDisplay = (date?: string) => {
+    if (!date) {
+      return "Unknown date";
+    }
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) {
+      return "Unknown date";
+    }
+    return parsed.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  const getPaymentMethodLabel = (method: PaymentMethod) => {
+    switch (method) {
+      case "cash":
+        return "Cash";
+      case "mtn_momo":
+        return "MTN Momo";
+      case "vodafone_cash":
+        return "Vodafone Cash";
+      case "bank_transfer":
+        return "Bank Transfer";
+      default:
+        return method;
+    }
   };
 
   if (loading) {
@@ -688,7 +836,7 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
       />
 
       {/* Statistics Cards */}
-      {statistics && (
+      {!!summaryMetrics && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -696,9 +844,9 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{statistics.total_invoices}</div>
+              <div className="text-2xl font-bold">{summaryMetrics.totalInvoices}</div>
               <p className="text-xs text-muted-foreground">
-                {statistics.pending_invoices} pending, {statistics.paid_invoices} paid
+                {summaryMetrics.pendingCount} pending, {summaryMetrics.paidCount} paid
               </p>
             </CardContent>
           </Card>
@@ -709,7 +857,7 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(statistics.total_amount)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(summaryMetrics.totalAmount)}</div>
               <p className="text-xs text-muted-foreground">
                 Across all invoices
               </p>
@@ -722,9 +870,9 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
               <AlertCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(statistics.total_outstanding)}</div>
+              <div className="text-2xl font-bold">{formatCurrency(summaryMetrics.totalOutstanding)}</div>
               <p className="text-xs text-muted-foreground">
-                {statistics.overdue_invoices} overdue invoices
+                {summaryMetrics.overdueCount} overdue invoices
               </p>
             </CardContent>
           </Card>
@@ -735,9 +883,11 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{statistics.collection_rate.toFixed(1)}%</div>
+              <div className="text-2xl font-bold">
+                {collectionRateDisplay.toFixed(1)}%
+              </div>
               <p className="text-xs text-muted-foreground">
-                {formatCurrency(statistics.total_paid)} collected
+                {formatCurrency(summaryMetrics.totalPaid)} collected
               </p>
             </CardContent>
           </Card>
@@ -816,7 +966,234 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
         </CardContent>
       </Card>
 
-      {/* Debug Components - Remove these after testing */}
+    {userRole === "landlord" && (
+      <>
+        <Card>
+          <CardHeader>
+            <CardTitle>Payment Evidence</CardTitle>
+            <CardDescription>
+              Review offline payment submissions from tenants.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {evidenceLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+              </div>
+            ) : pendingEvidence.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No pending evidence to review.</p>
+            ) : (
+              pendingEvidence.map((evidence) => (
+                <div
+                  key={evidence.id}
+                  className="border rounded-lg p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"
+                >
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">
+                      Submitted {formatDateDisplay(evidence.submitted_at)}
+                    </p>
+                    <p className="font-semibold">
+                      {evidence.invoice?.invoice_number || "Invoice"}
+                    </p>
+                    {(evidence.invoice?.property?.name || evidence.invoice?.unit?.unit_number) && (
+                      <p className="text-sm text-muted-foreground">
+                        {evidence.invoice?.property?.name || "Unknown property"}
+                        {evidence.invoice?.unit?.unit_number ? ` • Unit ${evidence.invoice.unit.unit_number}` : ""}
+                      </p>
+                    )}
+                    <p className="text-sm">
+                      {(evidence.tenant?.name || "Unknown tenant")} • {formatCurrency(evidence.amount)} via{" "}
+                      {getPaymentMethodLabel(evidence.payment_method)}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Payment Date: {formatDateDisplay(evidence.payment_date)}
+                    </p>
+                    {typeof evidence.invoice?.outstanding_balance === "number" && (
+                      <p className="text-sm text-muted-foreground">
+                        Outstanding Before Approval: {formatCurrency(evidence.invoice.outstanding_balance)}
+                      </p>
+                    )}
+                    {evidence.attachments && evidence.attachments.length > 0 && (
+                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                        <Paperclip className="h-4 w-4" />
+                        {evidence.attachments.length} attachment{evidence.attachments.length > 1 ? "s" : ""}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={() => handleReviewEvidence(evidence)}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      Review
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Recorded Evidence</CardTitle>
+            <CardDescription>
+              History of evidence that has been approved and recorded.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {evidenceLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+              </div>
+            ) : processedEvidence.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No recorded evidence entries.</p>
+            ) : (
+              processedEvidence.map((evidence) => (
+                <div
+                  key={evidence.id}
+                  className="border rounded-lg p-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between bg-muted/40"
+                >
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">
+                      Recorded {formatDateDisplay(evidence.reviewed_at)}
+                    </p>
+                    <p className="font-semibold">
+                      {evidence.invoice?.invoice_number || "Invoice"}
+                    </p>
+                    {(evidence.invoice?.property?.name || evidence.invoice?.unit?.unit_number) && (
+                      <p className="text-sm text-muted-foreground">
+                        {evidence.invoice?.property?.name || "Unknown property"}
+                        {evidence.invoice?.unit?.unit_number ? ` • Unit ${evidence.invoice.unit.unit_number}` : ""}
+                      </p>
+                    )}
+                    <p className="text-sm">
+                      {(evidence.tenant?.name || "Unknown tenant")} • {formatCurrency(evidence.amount)} via{" "}
+                      {getPaymentMethodLabel(evidence.payment_method)}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Payment Date: {formatDateDisplay(evidence.payment_date)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">Recorded</Badge>
+                    <Button variant="outline" onClick={() => handleReviewEvidence(evidence)}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      View
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </>
+    )}
+
+    <Dialog
+      open={evidenceModalOpen}
+      onOpenChange={(open) => {
+        if (!open) {
+          setEvidenceModalOpen(false);
+          setSelectedEvidence(null);
+        }
+      }}
+    >
+      <DialogContent className="max-w-3xl">
+        {selectedEvidence ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Review Payment Evidence</DialogTitle>
+              <DialogDescription>
+                Invoice {selectedEvidence.invoice?.invoice_number || "Unknown invoice"}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-2">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>
+                  <p className="text-sm text-muted-foreground">Tenant</p>
+                  <p className="font-medium">{selectedEvidence.tenant?.name || "Unknown tenant"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Amount</p>
+                  <p className="font-medium">{formatCurrency(selectedEvidence.amount)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Payment Method</p>
+                  <p className="font-medium">{getPaymentMethodLabel(selectedEvidence.payment_method)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Payment Date</p>
+                  <p className="font-medium">{formatDateDisplay(selectedEvidence.payment_date)}</p>
+                </div>
+                {selectedEvidence.reference_number && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">Reference Number</p>
+                    <p className="font-medium">{selectedEvidence.reference_number}</p>
+                  </div>
+                )}
+              </div>
+
+              {selectedEvidence.notes && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Notes</p>
+                  <p className="text-sm">{selectedEvidence.notes}</p>
+                </div>
+              )}
+
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">Attachments</p>
+                {selectedEvidence.attachments && selectedEvidence.attachments.length > 0 ? (
+                  <div className="space-y-2">
+                    {selectedEvidence.attachments.map((file, index) => (
+                      <div
+                        key={`${file.file_url || file.file_path || index}`}
+                        className="flex items-center justify-between rounded border px-3 py-2 text-sm"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Paperclip className="h-4 w-4" />
+                          <span>{file.file_name || `Attachment ${index + 1}`}</span>
+                        </div>
+                        {file.file_url && (
+                          <Button variant="outline" size="sm" asChild>
+                            <a href={file.file_url} target="_blank" rel="noopener noreferrer">
+                              View
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No attachments provided.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEvidenceModalOpen(false);
+                  setSelectedEvidence(null);
+                }}
+              >
+                Close
+              </Button>
+              {!isEvidenceReadonly && (
+                <Button onClick={() => handleApproveEvidence(selectedEvidence)}>
+                  Approve &amp; Record Payment
+                </Button>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="py-8 text-center text-sm text-muted-foreground">
+            No payment evidence selected.
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+
       {/* Invoice List */}
       <Card>
         <CardHeader>
@@ -844,27 +1221,31 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
                   <div className="flex items-center gap-4">
                     <div className="flex flex-col">
                       <div className="font-semibold">{invoice.invoice_number}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {invoice.property.name} - Unit {invoice.unit.unit_number}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Tenant: {invoice.tenant.name}
-                      </div>
+                      {(invoice.property?.name || invoice.unit?.unit_number) && (
+                        <div className="text-sm text-muted-foreground">
+                          {(invoice.property?.name || "Unknown property")} - Unit {(invoice.unit?.unit_number || "N/A")}
+                        </div>
+                      )}
+                      {invoice.tenant?.name && (
+                        <div className="text-sm text-muted-foreground">
+                          Tenant: {invoice.tenant.name}
+                        </div>
+                      )}
                     </div>
                   </div>
                   
                   <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="font-semibold">{formatCurrency(invoice.total_amount)}</div>
-                      <div className="text-sm text-muted-foreground">
-                        Due: {new Date(invoice.due_date).toLocaleDateString()}
-                      </div>
-                      {invoice.outstanding_balance > 0 && (
-                        <div className="text-sm text-destructive">
-                          Outstanding: {formatCurrency(invoice.outstanding_balance)}
-                        </div>
-                      )}
+                  <div className="text-right space-y-1">
+                    <div className="font-semibold">{formatCurrency(invoice.total_amount)}</div>
+                    <div className="text-sm text-muted-foreground">
+                      Due: {formatDateDisplay(invoice.due_date)}
                     </div>
+                    {invoice.outstanding_balance > 0 && (
+                      <div className="text-sm text-destructive">
+                        Outstanding: {formatCurrency(invoice.outstanding_balance)}
+                      </div>
+                    )}
+                  </div>
                     
                     <Badge variant={getStatusBadgeVariant(invoice.status)}>
                       {invoice.status.replace('_', ' ')}
@@ -877,6 +1258,15 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
                       <Button variant="outline" size="sm">
                         <Download className="h-4 w-4" />
                       </Button>
+                      {userRole === "landlord" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewInvoicePayments(invoice.id)}
+                        >
+                          <Receipt className="h-4 w-4" />
+                        </Button>
+                      )}
                       {userRole === "landlord" && invoice.status !== "paid" && (
                         <>
                           <Button 
@@ -916,15 +1306,25 @@ export function InvoiceDashboard({ userRole }: InvoiceDashboardProps) {
           onClose={() => {
             setIsPaymentModalOpen(false);
             setSelectedInvoiceId(null);
+            setRecordPaymentDefaults(null);
+            setPendingEvidenceId(null);
           }}
           invoiceId={selectedInvoiceId}
           invoiceNumber={selectedInvoiceNumber}
           outstandingBalance={selectedInvoiceBalance}
-          onSuccess={() => {
-            refreshData();
-          }}
+          onSuccess={handlePaymentSuccess}
+          defaultValues={recordPaymentDefaults || undefined}
         />
       )}
+
+      <InvoicePaymentHistoryModal
+        invoiceId={historyInvoiceId}
+        isOpen={showInvoicePaymentsModal}
+        onClose={() => {
+          setShowInvoicePaymentsModal(false);
+          setHistoryInvoiceId(null);
+        }}
+      />
     </div>
   );
 }

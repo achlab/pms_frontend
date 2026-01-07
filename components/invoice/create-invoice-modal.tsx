@@ -194,8 +194,23 @@ export function CreateInvoiceModal({
     e.preventDefault();
 
     // Validation
-    if (!formData.tenant_id || !formData.unit_id || !formData.property_id) {
-      toast.error("Please select a property, unit, and tenant");
+    if (!formData.tenant_id || !selectedUnit) {
+      toast.error("Please select a unit and tenant");
+      return;
+    }
+    
+    // Get property_id from selected property or from the unit
+    const selectedUnitData = units.find(u => u.id === selectedUnit);
+    const propertyId = selectedProperty || 
+                      formData.property_id || 
+                      (selectedUnitData?.property_id || 
+                       selectedUnitData?.propertyId || 
+                       selectedUnitData?.property?.id || 
+                       selectedUnitData?.property?.PropertyID ||
+                       selectedUnitData?.property?.property_id);
+    
+    if (!propertyId) {
+      toast.error("Please select a property. The property ID could not be determined from the selected unit.");
       return;
     }
 
@@ -237,9 +252,25 @@ export function CreateInvoiceModal({
           amount: charge.amount,
         }));
 
+      // Get property_id from selected property or from the unit
+      const selectedUnitData = units.find(u => u.id === selectedUnit);
+      const propertyId = selectedProperty || 
+                        formData.property_id || 
+                        (selectedUnitData?.property_id || 
+                         selectedUnitData?.propertyId || 
+                         selectedUnitData?.property?.id || 
+                         selectedUnitData?.property?.PropertyID ||
+                         selectedUnitData?.property?.property_id);
+      
+      if (!propertyId) {
+        toast.error("Please select a property. The property ID could not be determined from the selected unit.");
+        return;
+      }
+
       const requestData: CreateInvoiceRequest = {
         tenant_id: formData.tenant_id!,
         unit_id: formData.unit_id!,
+        property_id: propertyId,
         invoice_date: formData.invoice_date!,
         due_date: formData.due_date!,
         period_start: formData.period_start!,

@@ -327,28 +327,43 @@ class ApiClient {
   // HTTP METHODS
   // ============================================
 
+  // Helper to normalize URLs and prevent double slashes
+  private normalizeUrl(url: string): string {
+    const baseURL = this.instance.defaults.baseURL || '';
+    // If baseURL ends with / and url starts with /, remove leading slash from url
+    if (baseURL.endsWith('/') && url.startsWith('/')) {
+      return url.substring(1);
+    }
+    return url;
+  }
+
   async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.get(url, config);
+    const normalizedUrl = this.normalizeUrl(url);
+    const response = await this.instance.get(normalizedUrl, config);
     return this.normalizeResponse<T>(response.data);
   }
 
   async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.post(url, data, config);
+    const normalizedUrl = this.normalizeUrl(url);
+    const response = await this.instance.post(normalizedUrl, data, config);
     return this.normalizeResponse<T>(response.data);
   }
 
   async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.put(url, data, config);
+    const normalizedUrl = this.normalizeUrl(url);
+    const response = await this.instance.put(normalizedUrl, data, config);
     return this.normalizeResponse<T>(response.data);
   }
 
   async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.patch(url, data, config);
+    const normalizedUrl = this.normalizeUrl(url);
+    const response = await this.instance.patch(normalizedUrl, data, config);
     return this.normalizeResponse<T>(response.data);
   }
 
   async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response = await this.instance.delete(url, config);
+    const normalizedUrl = this.normalizeUrl(url);
+    const response = await this.instance.delete(normalizedUrl, config);
     return this.normalizeResponse<T>(response.data);
   }
 
@@ -357,19 +372,20 @@ class ApiClient {
   // ============================================
 
   async postFormData<T>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<T> {
-    console.log('🌐 API POST FormData request:', url, 'FormData keys:', Array.from(formData.keys()));
+    const normalizedUrl = this.normalizeUrl(url);
+    console.log('🌐 API POST FormData request:', normalizedUrl, 'FormData keys:', Array.from(formData.keys()));
     try {
-      const response = await this.instance.post(url, formData, {
+      const response = await this.instance.post(normalizedUrl, formData, {
         ...config,
         headers: {
           ...config?.headers,
           "Content-Type": "multipart/form-data",
         },
       });
-      console.log('✅ API POST FormData response:', url, response.data);
+      console.log('✅ API POST FormData response:', normalizedUrl, response.data);
       return this.normalizeResponse<T>(response.data);
     } catch (error) {
-      console.error('❌ API POST FormData error:', url, error);
+      console.error('❌ API POST FormData error:', normalizedUrl, error);
       throw error;
     }
   }

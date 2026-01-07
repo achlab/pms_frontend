@@ -13,7 +13,7 @@ export function useApproveRejectMaintenanceRequest() {
     {
       onSuccess: (data) => {
         console.log('🎉 Mutation onSuccess callback', data);
-        toast.success(`Maintenance request ${data.maintenance_request.status === 'approved' ? 'approved' : 'rejected'} successfully`);
+        toast.success(`Maintenance request ${data.status === 'approved' ? 'approved' : 'rejected'} successfully`);
       },
       onError: (error) => {
         console.error('💥 Mutation onError callback', error);

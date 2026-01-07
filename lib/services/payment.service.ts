@@ -10,6 +10,7 @@ import type {
   Payment,
   RecordPaymentRequest,
   PaymentQueryParams,
+  PaymentEvidence,
   PaginatedResponse,
   ApiResponse,
 } from "../api-types";
@@ -77,6 +78,37 @@ class PaymentService {
     notes?: string;
   }): Promise<ApiResponse<Payment>> {
     return apiClient.post<ApiResponse<Payment>>('/payments', data);
+  }
+
+  /**
+   * Submit payment evidence for an invoice (tenant)
+   */
+  async submitPaymentEvidence(
+    invoiceId: string,
+    formData: FormData
+  ): Promise<ApiResponse<any>> {
+    return apiClient.postFormData<ApiResponse<any>>(
+      `/payments/invoices/${invoiceId}/evidence`,
+      formData
+    );
+  }
+
+  /**
+   * Get payment evidence submissions (landlord/super admin)
+   */
+  async getPaymentEvidence(params?: { status?: string; invoice_id?: string }): Promise<ApiResponse<PaymentEvidence[]>> {
+    const url = buildUrl("/payments/evidence", params);
+    return apiClient.get<ApiResponse<PaymentEvidence[]>>(url);
+  }
+
+  /**
+   * Approve payment evidence entry
+   */
+  async approvePaymentEvidence(evidenceId: string): Promise<ApiResponse<PaymentEvidence>> {
+    return apiClient.patch<ApiResponse<PaymentEvidence>>(
+      `/payments/evidence/${evidenceId}/approve`,
+      {}
+    );
   }
 
   /**

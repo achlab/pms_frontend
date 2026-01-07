@@ -140,7 +140,8 @@ class CaretakerInvoiceService {
     total_outstanding: number;
     collection_rate: number;
   }>> {
-    return apiClient.get("/invoices/statistics");
+    const cacheBuster = Date.now();
+    return apiClient.get(`/invoices/statistics?_=${cacheBuster}`);
   }
 
   /**
@@ -159,8 +160,9 @@ class CaretakerInvoiceService {
     total_paid: number;
     total_outstanding: number;
   }>> {
+    const cacheBuster = Date.now();
     return apiClient.get(
-      `/invoices/statistics?start_date=${startDate}&end_date=${endDate}`
+      `/invoices/statistics?start_date=${startDate}&end_date=${endDate}&_=${cacheBuster}`
     );
   }
 

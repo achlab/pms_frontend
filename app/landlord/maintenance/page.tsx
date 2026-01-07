@@ -1,273 +1,174 @@
-/**
- * Maintenance Requests Page
- * Main page for viewing and managing maintenance requests
- */
-
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useAuth } from "@/contexts/auth-context";
+import { useState } from "react";
 import { MaintenanceRequestList } from "@/components/maintenance/maintenance-request-list";
 import { MaintenanceRequestDetails } from "@/components/maintenance/maintenance-request-details";
-import { AddNoteModal } from "@/components/maintenance/add-note-modal";
 import {
   useMaintenanceRequests,
   useMaintenanceRequest,
   useMaintenanceStatistics,
 } from "@/lib/hooks/use-maintenance";
+import type { MaintenanceQueryParams } from "@/lib/api-types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  Wrench,
-  Clock,
-  CheckCircle,
-  AlertCircle,
-  TrendingUp,
-  RefreshCw,
-  Plus,
-} from "lucide-react";
-import type { MaintenanceStatus, MaintenancePriority } from "@/lib/api-types";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CheckCircle, Clock, RefreshCw, Wrench } from "lucide-react";
 
-export default function MaintenancePage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { user } = useAuth();
-  const [filters, setFilters] = useState<{
-    status?: MaintenanceStatus;
-    priority?: MaintenancePriority;
-  }>({});
+const INITIAL_QUERY: MaintenanceQueryParams = {
+  per_page: 24,
+  page: 1,
+};
+
+export default function LandlordMaintenancePage() {
+  const [query, setQuery] = useState<MaintenanceQueryParams>(INITIAL_QUERY);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-  const [noteModalOpen, setNoteModalOpen] = useState(false);
-  const [noteRequestId, setNoteRequestId] = useState<string | null>(null);
 
-  // Fetch data
-  const { data: requestsData, isLoading, error, refetch } = useMaintenanceRequests(filters);
-  const { data: statsData, isLoading: loadingStats } = useMaintenanceStatistics();
-  const {
-    data: selectedRequestData,
-    isLoading: loadingRequest,
-    refetch: refetchRequest,
-  } = useMaintenanceRequest(selectedRequestId || "", {
-    enabled: !!selectedRequestId,
-  });
+  const { data, isLoading, error, refetch } = useMaintenanceRequests(query);
+  const requests = data?.data ?? [];
 
-  const requests = requestsData?.data || [];
-  const stats = statsData?.data || null;
-  const selectedRequest = selectedRequestData?.data || null;
+  const { data: statsData, isLoading: statsLoading } = useMaintenanceStatistics();
+  const stats = statsData?.data;
 
-  // Auto-open modal when coming from notification with requestId
-  useEffect(() => {
-    const requestIdFromUrl = searchParams.get('requestId');
-    if (requestIdFromUrl && !selectedRequestId) {
-      setSelectedRequestId(requestIdFromUrl);
-      // Clean up URL after opening modal
-      router.replace('/maintenance', { scroll: false });
-    }
-  }, [searchParams, selectedRequestId, router]);
+  const { data: selectedData, isLoading: loadingSelected } = useMaintenanceRequest(
+    selectedRequestId || "",
+    !!selectedRequestId
+  );
+  const selectedRequest = selectedData?.data;
 
-  const handleCreateNew = () => {
-    router.push("/maintenance/create");
-  };
-
-  const handleViewDetails = (requestId: string) => {
-    setSelectedRequestId(requestId);
-  };
-
-  const handleCloseDetails = () => {
-    setSelectedRequestId(null);
-  };
-
-  const handleAddNote = (requestId: string) => {
-    setNoteRequestId(requestId);
-    setNoteModalOpen(true);
-  };
-
-  const handleNoteSuccess = () => {
-    refetchRequest();
+  const handleFilterChange = (filters: {
+    status?: MaintenanceQueryParams["status"];
+    priority?: MaintenanceQueryParams["priority"];
+    search?: string;
+  }) => {
+    setQuery((prev) => ({
+      ...prev,
+      page: 1,
+      status: filters.status,
+      priority: filters.priority,
+      search: filters.search,
+    }));
   };
 
   return (
     <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Maintenance Requests</h1>
           <p className="text-muted-foreground mt-1">
-            {user?.role === "tenant" 
-              ? "Submit new maintenance requests and track existing ones"
-              : "View and manage maintenance requests"
-            }
+            Review tenant submissions, approve work, and keep everyone aligned.
           </p>
         </div>
-        {user?.role === "tenant" && (
-          <Button onClick={handleCreateNew}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Request
-          </Button>
-        )}
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Refresh
+        </Button>
       </div>
 
-      {/* Statistics Cards */}
-      {loadingStats ? (
-        <div className="grid gap-4 md:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i}>
+      {statsLoading ? (
+        <div className="grid gap-4 md:grid-cols-3">
+          {[...Array(3)].map((_, index) => (
+            <Card key={index}>
               <CardHeader className="pb-2">
                 <Skeleton className="h-4 w-24" />
               </CardHeader>
               <CardContent>
-                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-8 w-20 mb-2" />
                 <Skeleton className="h-3 w-32" />
               </CardContent>
             </Card>
           ))}
         </div>
       ) : stats ? (
-        <div className="grid gap-4 md:grid-cols-4">
-          {/* Total Requests */}
+        <div className="grid gap-4 md:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
               <Wrench className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.total_requests}</div>
+              <div className="text-2xl font-bold">{stats.total_requests ?? 0}</div>
               <p className="text-xs text-muted-foreground mt-1">All time</p>
             </CardContent>
           </Card>
 
-          {/* Open Requests */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Open Requests</CardTitle>
+              <CardTitle className="text-sm font-medium">Open</CardTitle>
               <Clock className="h-4 w-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.open_requests}</div>
-              <p className="text-xs text-muted-foreground mt-1">Currently active</p>
+              <div className="text-2xl font-bold">{stats.open_requests ?? 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">Pending or in progress</p>
             </CardContent>
           </Card>
 
-          {/* Resolved Requests */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Resolved</CardTitle>
               <CheckCircle className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.resolved_requests}</div>
-              <p className="text-xs text-muted-foreground mt-1">Successfully completed</p>
-            </CardContent>
-          </Card>
-
-          {/* Average Resolution Time */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Avg. Resolution</CardTitle>
-              <TrendingUp className="h-4 w-4 text-purple-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.average_resolution_time
-                  ? `${stats.average_resolution_time} days`
-                  : "N/A"}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Time to resolve</p>
+              <div className="text-2xl font-bold">{stats.resolved_requests ?? 0}</div>
+              <p className="text-xs text-muted-foreground mt-1">Closed out successfully</p>
             </CardContent>
           </Card>
         </div>
       ) : null}
 
-      {/* Error State */}
       {error && (
         <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            Failed to load maintenance requests. Please try again.
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-4"
-              onClick={() => refetch()}
-            >
-              <RefreshCw className="h-3 w-3 mr-2" />
-              Retry
-            </Button>
+            We couldn\'t load maintenance requests. Please try again.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Loading State */}
       {isLoading ? (
         <div className="space-y-4">
           <Skeleton className="h-20 w-full" />
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {[...Array(6)].map((_, i) => (
-              <Skeleton key={i} className="h-64" />
+            {[...Array(6)].map((_, index) => (
+              <Skeleton key={index} className="h-64" />
             ))}
           </div>
         </div>
       ) : (
-        /* Request List */
         <MaintenanceRequestList
           requests={requests}
-          onViewDetails={handleViewDetails}
-          onAddNote={handleAddNote}
-          onCreateNew={handleCreateNew}
-          onRefresh={() => refetch()}
-          onFilterChange={setFilters}
+          onViewDetails={(id) => setSelectedRequestId(id)}
+          onFilterChange={handleFilterChange}
+          onRefresh={refetch}
         />
       )}
 
-      {/* Request Details Dialog */}
-      <Dialog open={!!selectedRequestId} onOpenChange={handleCloseDetails}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={!!selectedRequestId} onOpenChange={(open) => !open && setSelectedRequestId(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Request Details</DialogTitle>
           </DialogHeader>
-          {loadingRequest ? (
+          {loadingSelected && !selectedRequest ? (
             <div className="space-y-4">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-6 w-1/2" />
+              <Skeleton className="h-24 w-full" />
               <Skeleton className="h-64 w-full" />
             </div>
           ) : selectedRequest ? (
             <MaintenanceRequestDetails
               request={selectedRequest}
               onUpdate={() => {
-                refetchRequest();
                 refetch();
+                setSelectedRequestId(null);
               }}
-              onClose={() => setSelectedRequestId(null)}
             />
-          ) : (
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>Request not found</AlertDescription>
-            </Alert>
-          )}
+          ) : selectedRequestId ? (
+            <p className="text-sm text-muted-foreground">
+              This request could not be loaded. It may have been removed.
+            </p>
+          ) : null}
         </DialogContent>
       </Dialog>
-
-      {/* Add Note Modal */}
-      {noteRequestId && (
-        <AddNoteModal
-          requestId={noteRequestId}
-          requestNumber={
-            requests.find((r) => r.id === noteRequestId)?.request_number || ""
-          }
-          open={noteModalOpen}
-          onClose={() => {
-            setNoteModalOpen(false);
-            setNoteRequestId(null);
-          }}
-          onSuccess={handleNoteSuccess}
-        />
-      )}
-      </div>
+    </div>
   );
 }

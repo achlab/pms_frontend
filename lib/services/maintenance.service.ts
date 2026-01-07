@@ -15,6 +15,10 @@ import type {
   MaintenanceQueryParams,
   PaginatedResponse,
   ApiResponse,
+  ReviewCompletionRequest,
+  MaintenanceRequestEvent,
+  Caretaker,
+  UpdateMaintenanceStatusPayload,
 } from "../api-types";
 
 class MaintenanceService {
@@ -39,8 +43,20 @@ class MaintenanceService {
   /**
    * Get maintenance requests with optional filters
    */
-  async getMaintenanceRequests(params?: MaintenanceQueryParams): Promise<PaginatedResponse<MaintenanceRequest>> {
+  async getMaintenanceRequests(
+    params?: MaintenanceQueryParams
+  ): Promise<PaginatedResponse<MaintenanceRequest>> {
     const url = buildUrl("/maintenance/requests", params);
+    return apiClient.get<PaginatedResponse<MaintenanceRequest>>(url);
+  }
+
+  /**
+   * Get open maintenance requests (super admin overview)
+   */
+  async getOpenMaintenanceRequests(
+    params?: MaintenanceQueryParams
+  ): Promise<PaginatedResponse<MaintenanceRequest>> {
+    const url = buildUrl("/maintenance/requests/open", params);
     return apiClient.get<PaginatedResponse<MaintenanceRequest>>(url);
   }
 
@@ -54,8 +70,9 @@ class MaintenanceService {
   /**
    * Create maintenance request
    */
-  async createMaintenanceRequest(data: CreateMaintenanceRequest): Promise<ApiResponse<MaintenanceRequest>> {
-    // Check if there are files to upload
+  async createMaintenanceRequest(
+    data: CreateMaintenanceRequest
+  ): Promise<ApiResponse<MaintenanceRequest>> {
     const hasFiles = data.media && data.media.length > 0;
 
     if (hasFiles) {
@@ -64,14 +81,13 @@ class MaintenanceService {
         "/maintenance/requests",
         formData
       );
-    } else {
-      // Send as JSON if no files
-      const { media, ...jsonData } = data;
-      return apiClient.post<ApiResponse<MaintenanceRequest>>(
-        "/maintenance/requests",
-        jsonData
-      );
     }
+
+    const { media, ...jsonData } = data;
+    return apiClient.post<ApiResponse<MaintenanceRequest>>(
+      "/maintenance/requests",
+      jsonData
+    );
   }
 
   /**
@@ -96,36 +112,33 @@ class MaintenanceService {
     resolutionNote?: string,
     photos?: File[]
   ): Promise<ApiResponse<MaintenanceRequest>> {
-    // If no photos, send as regular JSON
     if (!photos || photos.length === 0) {
       return apiClient.patch<ApiResponse<MaintenanceRequest>>(
         `/maintenance/requests/${requestId}/mark-resolution`,
         {
           is_resolved: isResolved,
-          resolution_note: resolutionNote
+          resolution_note: resolutionNote,
         }
       );
     }
-    
-    // If photos are present, use FormData
+
     const formData = new FormData();
-    formData.append('is_resolved', isResolved ? '1' : '0');
-    
+    formData.append("is_resolved", isResolved ? "1" : "0");
+
     if (resolutionNote) {
-      formData.append('resolution_note', resolutionNote);
+      formData.append("resolution_note", resolutionNote);
     }
-    
-    // Append all photos
-    photos.forEach((photo, index) => {
-      formData.append('photos[]', photo);
+
+    photos.forEach((photo) => {
+      formData.append("photos[]", photo);
     });
-    
+
     return apiClient.post<ApiResponse<MaintenanceRequest>>(
       `/maintenance/requests/${requestId}/mark-resolution?_method=PATCH`,
       formData,
       {
         headers: {
-          'Content-Type': 'multipart/form-data',
+          "Content-Type": "multipart/form-data",
         },
       }
     );
@@ -139,31 +152,49 @@ class MaintenanceService {
   }
 
   /**
-   * Get requests by status
+   * Update maintenance request status (caretaker/landlord/super admin)
    */
-  async getRequestsByStatus(status: string, params?: MaintenanceQueryParams): Promise<PaginatedResponse<MaintenanceRequest>> {
-    return this.getMaintenanceRequests({ ...params, status: status as any });
+  async updateStatus(
+    requestId: string,
+    data: UpdateMaintenanceStatusPayload
+  ): Promise<ApiResponse<MaintenanceRequest>> {
+    return apiClient.patch<ApiResponse<MaintenanceRequest>>(
+      `/maintenance/requests/${requestId}/status`,
+      data
+    );
   }
 
   /**
-   * Get requests by priority
+   * Review completion of a maintenance request (by tenant or landlord)
    */
-  async getRequestsByPriority(priority: string, params?: MaintenanceQueryParams): Promise<PaginatedResponse<MaintenanceRequest>> {
-    return this.getMaintenanceRequests({ ...params, priority: priority as any });
+  async reviewCompletion(
+    requestId: string,
+    data: ReviewCompletionRequest
+  ): Promise<ApiResponse<MaintenanceRequest>> {
+    return apiClient.post<ApiResponse<MaintenanceRequest>>(
+      `/maintenance/requests/${requestId}/review-completion`,
+      data
+    );
   }
 
   /**
-   * Get urgent requests
+   * Get maintenance request events
    */
-  async getUrgentRequests(params?: MaintenanceQueryParams): Promise<PaginatedResponse<MaintenanceRequest>> {
-    return this.getRequestsByPriority("urgent", params);
+  async getRequestEvents(
+    requestId: string
+  ): Promise<ApiResponse<MaintenanceRequestEvent[]>> {
+    return apiClient.get<ApiResponse<MaintenanceRequestEvent[]>>(
+      `/maintenance/requests/${requestId}/events`
+    );
   }
 
   /**
-   * Get in-progress requests
+   * Get available caretakers for assignment
    */
-  async getInProgressRequests(params?: MaintenanceQueryParams): Promise<PaginatedResponse<MaintenanceRequest>> {
-    return this.getRequestsByStatus("in_progress", params);
+  async getCaretakers(): Promise<ApiResponse<Caretaker[]>> {
+    return apiClient.get<ApiResponse<Caretaker[]>>(
+      "/maintenance/requests/caretakers"
+    );
   }
 }
 

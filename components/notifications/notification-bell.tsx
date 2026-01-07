@@ -105,11 +105,25 @@ export function NotificationBell() {
       }
     } else if (notificationType?.includes('invoice')) {
       // Invoice notifications → go to invoices page
-      const invoiceId = notificationData.invoice_id;
+      const invoiceId = notificationData.invoice_id || notificationData.invoiceId;
       if (invoiceId) {
-        targetUrl = `/invoices?invoiceId=${invoiceId}`;
+        // Route based on user role
+        if (user?.role === 'tenant') {
+          targetUrl = `/tenant/invoices?invoiceId=${invoiceId}`;
+        } else if (user?.role === 'landlord') {
+          targetUrl = `/landlord/invoices/${invoiceId}`;
+        } else {
+          targetUrl = `/invoices?invoiceId=${invoiceId}`;
+        }
       } else {
-        targetUrl = '/invoices';
+        // Fallback to invoices list based on role
+        if (user?.role === 'tenant') {
+          targetUrl = '/tenant/invoices';
+        } else if (user?.role === 'landlord') {
+          targetUrl = '/landlord/invoices';
+        } else {
+          targetUrl = '/invoices';
+        }
       }
     } else if (notificationType?.includes('lease')) {
       // Lease notifications → go to leases page

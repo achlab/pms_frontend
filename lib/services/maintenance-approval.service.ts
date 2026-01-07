@@ -6,16 +6,9 @@ export interface ApproveRejectData {
   rejection_reason?: string;
 }
 
-export interface ApproveRejectResponse {
-  maintenance_request: MaintenanceRequest;
-  event: {
-    id: string;
-    type: string;
-    title: string;
-    description: string;
-    rejection_reason?: string;
-    created_at: string;
-  };
+// Backend returns the updated maintenance request directly
+export interface ApproveRejectResponse extends MaintenanceRequest {
+  // The response is just the MaintenanceRequest data
 }
 
 export const maintenanceApprovalService = {

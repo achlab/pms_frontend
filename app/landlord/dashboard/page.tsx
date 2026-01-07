@@ -203,9 +203,9 @@ export default function LandlordDashboardPage() {
                 </div>
                 <div>
                   <p className="text-white/80 text-sm font-medium">Active Tenants</p>
-                  <p className="text-3xl font-bold">{overview.total_tenants}</p>
+                  <p className="text-3xl font-bold">{overview.occupied_units}</p>
                   <p className="text-white/70 text-xs mt-1">
-                    Across all properties
+                    Tenants with assigned units
                   </p>
                 </div>
               </CardContent>
@@ -325,7 +325,7 @@ export default function LandlordDashboardPage() {
                         variant="destructive"
                         size="sm"
                         className="w-full"
-                        onClick={() => router.push("/invoices?status=overdue")}
+                        onClick={() => router.push("/landlord/invoices?status=overdue")}
                       >
                         <Bell className="mr-2 h-4 w-4" />
                         Send Reminders
@@ -352,7 +352,7 @@ export default function LandlordDashboardPage() {
                   <Button
                     variant="outline"
                     className="w-full bg-white/10 border-white/30 text-white hover:bg-white/20"
-                    onClick={() => router.push("/invoices")}
+                    onClick={() => router.push("/landlord/invoices")}
                   >
                     <FileText className="mr-2 h-4 w-4" />
                     Manage Invoices

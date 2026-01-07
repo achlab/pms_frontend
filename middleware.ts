@@ -28,19 +28,17 @@ const PUBLIC_ROUTES = [
 ]
 
 // Role-specific protected route prefixes
-const ROLE_ROUTE_PREFIXES = {
+const ROLE_ROUTE_PREFIXES: Record<UserRole, string[]> = {
   super_admin: ['/admin'],
   landlord: ['/landlord'],
-  caretaker: ['/caretaker', '/maintenance-requests', '/my-unit'],
-  tenant: ['/tenant', '/my-lease', '/my-unit', '/pay-rent', '/payments-invoices', '/meter-readings'],
+  caretaker: ['/caretaker'],
+  tenant: ['/tenant'],
 }
 
 // Shared routes accessible by all authenticated users
-const SHARED_ROUTES = [
-  '/profile',
-  '/settings',
-  '/maintenance',
-]
+// Keep maintenance shared because caretakers/tenants use it;
+// landlords/super_admins will be redirected from the page logic.
+const SHARED_ROUTES = ['/profile', '/settings', '/maintenance']
 
 // Default dashboard routes per role
 const DEFAULT_DASHBOARDS: Record<UserRole, string> = {

@@ -159,18 +159,13 @@ const getNavigationForRole = (role: string) => {
       },
       {
         name: "Invoices",
-        href: "/invoices",
+        href: "/tenant/invoices",
         icon: Receipt,
       },
       {
         name: "Maintenance",
-        href: "/maintenance/create",
-        icon: Wrench,
-      },
-      {
-        name: "My Requests",
         href: "/maintenance",
-        icon: Tool,
+        icon: Wrench,
       },
       {
         name: "Meter Readings",

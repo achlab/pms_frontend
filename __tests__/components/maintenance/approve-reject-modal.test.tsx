@@ -1,287 +1,492 @@
-import React from 'react';
+/**
+ * Tests for ApproveRejectModal Component
+ * Simplified workflow: approve or reject with reason, no artisan assignment
+ */
+
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import userEvent from '@testing-library/user-event';
 import { ApproveRejectModal } from '@/components/maintenance/approve-reject-modal';
-import { MaintenanceRequest } from '@/lib/api-types';
-import * as maintenanceApprovalHooks from '@/lib/hooks/use-maintenance-approval';
+import { useApproveRejectMaintenanceRequest } from '@/lib/hooks/use-maintenance-approval';
+import type { MaintenanceRequest } from '@/lib/api-types';
 
 // Mock the hooks
 jest.mock('@/lib/hooks/use-maintenance-approval');
-jest.mock('sonner', () => ({
-  toast: {
-    success: jest.fn(),
-    error: jest.fn(),
-  },
-}));
+jest.mock('@/hooks/use-toast');
 
-const mockMaintenanceRequest: MaintenanceRequest = {
-  id: '123',
-  request_number: 'MR2025110001',
-  title: 'Leaky faucet in kitchen',
-  description: 'The kitchen faucet has been leaking for two days and needs immediate attention.',
-  status: 'received',
-  priority: 'urgent',
-  property: {
-    id: 'prop-1',
-    name: 'Test Property',
-    address: '123 Test St',
-    landlord_id: 'landlord-1'
-  },
-  unit: {
-    id: 'unit-1',
-    unit_number: '101',
-    property_id: 'prop-1'
-  },
-  tenant: {
-    id: 'tenant-1',
-    name: 'John Doe',
-    email: 'john@example.com',
-    role: 'tenant'
-  },
-  category: {
-    id: 'cat-1',
-    name: 'Plumbing',
-    icon: 'wrench',
-    color: '#3B82F6'
-  },
-  created_at: '2025-11-27T10:00:00Z',
-  updated_at: '2025-11-27T10:00:00Z'
-};
+const mockMutateAsync = jest.fn();
+const mockUseApproveRejectMaintenanceRequest = useApproveRejectMaintenanceRequest as jest.MockedFunction<
+  typeof useApproveRejectMaintenanceRequest
+>;
 
-const renderWithQueryClient = (component: React.ReactElement) => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
+describe('ApproveRejectModal - Simplified Workflow', () => {
+  const mockMaintenanceRequest: MaintenanceRequest = {
+    id: 1,
+    request_number: 'MNT-2026-001',
+    status: 'pending',
+    priority: 'normal',
+    description: 'Leaking faucet in kitchen',
+    property: {
+      id: 1,
+      name: 'Sunset Apartments',
+      address: '123 Main St',
     },
-  });
+    unit: {
+      id: 1,
+      unit_number: 'A101',
+    },
+    tenant: {
+      id: 1,
+      first_name: 'John',
+      last_name: 'Doe',
+      email: 'john@example.com',
+    },
+    category: {
+      id: 1,
+      name: 'Plumbing',
+      icon: '🔧',
+    },
+    created_at: '2026-01-07T10:00:00Z',
+    updated_at: '2026-01-07T10:00:00Z',
+  } as MaintenanceRequest;
 
-  return render(
-    <QueryClientProvider client={queryClient}>
-      {component}
-    </QueryClientProvider>
-  );
-};
-
-describe('ApproveRejectModal', () => {
-  const mockMutateAsync = jest.fn();
   const mockOnClose = jest.fn();
   const mockOnSuccess = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
-    (maintenanceApprovalHooks.useApproveRejectMaintenanceRequest as jest.Mock).mockReturnValue({
+    mockUseApproveRejectMaintenanceRequest.mockReturnValue({
       mutateAsync: mockMutateAsync,
       isPending: false,
+      isError: false,
+      error: null,
+    } as any);
+  });
+
+  describe('Modal Display', () => {
+    it('should render modal when open', () => {
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      expect(screen.getByText('Review Maintenance Request')).toBeInTheDocument();
+      expect(screen.getByText('MNT-2026-001')).toBeInTheDocument();
+      expect(screen.getByText('Sunset Apartments')).toBeInTheDocument();
+    });
+
+    it('should not render modal when closed', () => {
+      render(
+        <ApproveRejectModal
+          isOpen={false}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      expect(screen.queryByText('Review Maintenance Request')).not.toBeInTheDocument();
+    });
+
+    it('should display request details correctly', () => {
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      expect(screen.getByText('Leaking faucet in kitchen')).toBeInTheDocument();
+      expect(screen.getByText('John Doe')).toBeInTheDocument();
+      expect(screen.getByText('A101')).toBeInTheDocument();
+      expect(screen.getByText('Plumbing')).toBeInTheDocument();
     });
   });
 
-  it('renders modal with maintenance request details', () => {
-    renderWithQueryClient(
-      <ApproveRejectModal
-        isOpen={true}
-        onClose={mockOnClose}
-        maintenanceRequest={mockMaintenanceRequest}
-        onSuccess={mockOnSuccess}
-      />
-    );
+  describe('Approve Action', () => {
+    it('should allow selecting approve action', async () => {
+      const user = userEvent.setup();
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
 
-    expect(screen.getByText('Review Maintenance Request')).toBeInTheDocument();
-    expect(screen.getByText('Leaky faucet in kitchen')).toBeInTheDocument();
-    expect(screen.getByText('The kitchen faucet has been leaking for two days and needs immediate attention.')).toBeInTheDocument();
-    expect(screen.getByText('Test Property - Unit 101')).toBeInTheDocument();
-    expect(screen.getByText('John Doe')).toBeInTheDocument();
-    expect(screen.getByText('Plumbing')).toBeInTheDocument();
-  });
+      const approveButton = screen.getByRole('button', { name: /approve/i });
+      await user.click(approveButton);
 
-  it('shows approve and reject buttons', () => {
-    renderWithQueryClient(
-      <ApproveRejectModal
-        isOpen={true}
-        onClose={mockOnClose}
-        maintenanceRequest={mockMaintenanceRequest}
-        onSuccess={mockOnSuccess}
-      />
-    );
+      expect(approveButton).toHaveClass('bg-green-600');
+    });
 
-    expect(screen.getByText('Approve Request')).toBeInTheDocument();
-    expect(screen.getByText('Reject Request')).toBeInTheDocument();
-  });
+    it('should submit approval without requiring additional fields', async () => {
+      const user = userEvent.setup();
+      mockMutateAsync.mockResolvedValueOnce({ success: true });
 
-  it('shows rejection reason field when reject is selected', async () => {
-    renderWithQueryClient(
-      <ApproveRejectModal
-        isOpen={true}
-        onClose={mockOnClose}
-        maintenanceRequest={mockMaintenanceRequest}
-        onSuccess={mockOnSuccess}
-      />
-    );
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
 
-    const rejectButton = screen.getByText('Reject Request');
-    fireEvent.click(rejectButton);
+      // Select approve
+      const approveButton = screen.getByRole('button', { name: /approve/i });
+      await user.click(approveButton);
 
-    await waitFor(() => {
-      expect(screen.getByLabelText(/Rejection Reason/)).toBeInTheDocument();
-      expect(screen.getByText('Minimum 10 characters required')).toBeInTheDocument();
+      // Submit should be enabled immediately
+      const submitButton = screen.getByRole('button', { name: /confirm approval/i });
+      expect(submitButton).not.toBeDisabled();
+
+      await user.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledWith({
+          requestId: 1,
+          action: 'approve',
+          rejection_reason: undefined,
+        });
+      });
+
+      expect(mockOnSuccess).toHaveBeenCalled();
+      expect(mockOnClose).toHaveBeenCalled();
+    });
+
+    it('should NOT show artisan assignment fields', () => {
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      // These fields should NOT exist in simplified workflow
+      expect(screen.queryByLabelText(/artisan name/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/phone/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/company/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/notes/i)).not.toBeInTheDocument();
     });
   });
 
-  it('validates rejection reason length', async () => {
-    renderWithQueryClient(
-      <ApproveRejectModal
-        isOpen={true}
-        onClose={mockOnClose}
-        maintenanceRequest={mockMaintenanceRequest}
-        onSuccess={mockOnSuccess}
-      />
-    );
+  describe('Reject Action', () => {
+    it('should allow selecting reject action', async () => {
+      const user = userEvent.setup();
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
 
-    // Select reject
-    const rejectButton = screen.getByText('Reject Request');
-    fireEvent.click(rejectButton);
+      const rejectButton = screen.getByRole('button', { name: /reject/i });
+      await user.click(rejectButton);
 
-    // Try to submit with short reason
-    const reasonField = await screen.findByLabelText(/Rejection Reason/);
-    fireEvent.change(reasonField, { target: { value: 'Too short' } });
-
-    const submitButton = screen.getByRole('button', { name: /Reject Request/ });
-    expect(submitButton).toBeDisabled();
-  });
-
-  it('enables submit button when rejection reason is long enough', async () => {
-    renderWithQueryClient(
-      <ApproveRejectModal
-        isOpen={true}
-        onClose={mockOnClose}
-        maintenanceRequest={mockMaintenanceRequest}
-        onSuccess={mockOnSuccess}
-      />
-    );
-
-    // Select reject
-    const rejectButton = screen.getByText('Reject Request');
-    fireEvent.click(rejectButton);
-
-    // Enter valid reason
-    const reasonField = await screen.findByLabelText(/Rejection Reason/);
-    fireEvent.change(reasonField, { 
-      target: { value: 'This is a valid rejection reason that is long enough' } 
+      expect(rejectButton).toHaveClass('bg-red-600');
     });
 
-    await waitFor(() => {
-      const submitButton = screen.getByRole('button', { name: /Reject Request/ });
+    it('should show rejection reason field when reject is selected', async () => {
+      const user = userEvent.setup();
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      const rejectButton = screen.getByRole('button', { name: /reject/i });
+      await user.click(rejectButton);
+
+      expect(screen.getByLabelText(/rejection reason/i)).toBeInTheDocument();
+    });
+
+    it('should require rejection reason with minimum 10 characters', async () => {
+      const user = userEvent.setup();
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      // Select reject
+      const rejectButton = screen.getByRole('button', { name: /reject/i });
+      await user.click(rejectButton);
+
+      const submitButton = screen.getByRole('button', { name: /confirm rejection/i });
+
+      // Should be disabled without reason
+      expect(submitButton).toBeDisabled();
+
+      // Enter short reason (less than 10 chars)
+      const reasonField = screen.getByLabelText(/rejection reason/i);
+      await user.type(reasonField, 'Too short');
+
+      // Should still be disabled
+      expect(submitButton).toBeDisabled();
+
+      // Enter valid reason (10+ chars)
+      await user.clear(reasonField);
+      await user.type(reasonField, 'Not covered under lease agreement');
+
+      // Should now be enabled
       expect(submitButton).not.toBeDisabled();
     });
-  });
 
-  it('submits approval successfully', async () => {
-    mockMutateAsync.mockResolvedValue({});
+    it('should submit rejection with reason', async () => {
+      const user = userEvent.setup();
+      mockMutateAsync.mockResolvedValueOnce({ success: true });
 
-    renderWithQueryClient(
-      <ApproveRejectModal
-        isOpen={true}
-        onClose={mockOnClose}
-        maintenanceRequest={mockMaintenanceRequest}
-        onSuccess={mockOnSuccess}
-      />
-    );
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
 
-    // Select approve
-    const approveButton = screen.getByText('Approve Request');
-    fireEvent.click(approveButton);
+      // Select reject
+      const rejectButton = screen.getByRole('button', { name: /reject/i });
+      await user.click(rejectButton);
 
-    // Submit
-    const submitButton = screen.getByRole('button', { name: /Approve Request/ });
-    fireEvent.click(submitButton);
+      // Enter rejection reason
+      const reasonField = screen.getByLabelText(/rejection reason/i);
+      await user.type(reasonField, 'Not covered under lease agreement');
 
-    await waitFor(() => {
-      expect(mockMutateAsync).toHaveBeenCalledWith({
-        requestId: '123',
-        action: 'approve',
-        rejection_reason: undefined,
+      // Submit
+      const submitButton = screen.getByRole('button', { name: /confirm rejection/i });
+      await user.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalledWith({
+          requestId: 1,
+          action: 'reject',
+          rejection_reason: 'Not covered under lease agreement',
+        });
       });
+
+      expect(mockOnSuccess).toHaveBeenCalled();
+      expect(mockOnClose).toHaveBeenCalled();
     });
 
-    expect(mockOnSuccess).toHaveBeenCalled();
-    expect(mockOnClose).toHaveBeenCalled();
+    it('should show character count for rejection reason', async () => {
+      const user = userEvent.setup();
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      // Select reject
+      const rejectButton = screen.getByRole('button', { name: /reject/i });
+      await user.click(rejectButton);
+
+      const reasonField = screen.getByLabelText(/rejection reason/i);
+      await user.type(reasonField, 'Test reason');
+
+      expect(screen.getByText(/11 characters/i)).toBeInTheDocument();
+    });
   });
 
-  it('submits rejection with reason successfully', async () => {
-    mockMutateAsync.mockResolvedValue({});
+  describe('Modal Behavior', () => {
+    it('should reset form when closed', async () => {
+      const user = userEvent.setup();
+      const { rerender } = render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
 
-    renderWithQueryClient(
-      <ApproveRejectModal
-        isOpen={true}
-        onClose={mockOnClose}
-        maintenanceRequest={mockMaintenanceRequest}
-        onSuccess={mockOnSuccess}
-      />
-    );
+      // Select reject and enter reason
+      const rejectButton = screen.getByRole('button', { name: /reject/i });
+      await user.click(rejectButton);
 
-    // Select reject
-    const rejectButton = screen.getByText('Reject Request');
-    fireEvent.click(rejectButton);
+      const reasonField = screen.getByLabelText(/rejection reason/i);
+      await user.type(reasonField, 'Test rejection reason');
 
-    // Enter reason
-    const reasonField = await screen.findByLabelText(/Rejection Reason/);
-    const rejectionReason = 'This issue is tenant responsibility according to lease agreement.';
-    fireEvent.change(reasonField, { target: { value: rejectionReason } });
+      // Close modal
+      rerender(
+        <ApproveRejectModal
+          isOpen={false}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
 
-    // Submit
-    await waitFor(() => {
-      const submitButton = screen.getByRole('button', { name: /Reject Request/ });
-      fireEvent.click(submitButton);
+      // Reopen modal
+      rerender(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      // Form should be reset (no action selected)
+      const submitButtons = screen.queryByRole('button', { name: /confirm/i });
+      expect(submitButtons).not.toBeInTheDocument();
     });
 
-    await waitFor(() => {
-      expect(mockMutateAsync).toHaveBeenCalledWith({
-        requestId: '123',
-        action: 'reject',
-        rejection_reason: rejectionReason,
+    it('should disable submit button while submitting', async () => {
+      const user = userEvent.setup();
+      mockUseApproveRejectMaintenanceRequest.mockReturnValue({
+        mutateAsync: mockMutateAsync,
+        isPending: true,
+        isError: false,
+        error: null,
+      } as any);
+
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      // Select approve
+      const approveButton = screen.getByRole('button', { name: /approve/i });
+      await user.click(approveButton);
+
+      const submitButton = screen.getByRole('button', { name: /confirm approval/i });
+      expect(submitButton).toBeDisabled();
+    });
+
+    it('should call onClose when cancel is clicked', async () => {
+      const user = userEvent.setup();
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      const cancelButton = screen.getByRole('button', { name: /cancel/i });
+      await user.click(cancelButton);
+
+      expect(mockOnClose).toHaveBeenCalled();
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle API errors gracefully', async () => {
+      const user = userEvent.setup();
+      mockMutateAsync.mockRejectedValueOnce(new Error('API Error'));
+
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      // Select approve and submit
+      const approveButton = screen.getByRole('button', { name: /approve/i });
+      await user.click(approveButton);
+
+      const submitButton = screen.getByRole('button', { name: /confirm approval/i });
+      await user.click(submitButton);
+
+      await waitFor(() => {
+        expect(mockMutateAsync).toHaveBeenCalled();
       });
-    });
 
-    expect(mockOnSuccess).toHaveBeenCalled();
-    expect(mockOnClose).toHaveBeenCalled();
+      // Should not call success or close on error
+      expect(mockOnSuccess).not.toHaveBeenCalled();
+      expect(mockOnClose).not.toHaveBeenCalled();
+    });
   });
 
-  it('closes modal when cancel is clicked', () => {
-    renderWithQueryClient(
-      <ApproveRejectModal
-        isOpen={true}
-        onClose={mockOnClose}
-        maintenanceRequest={mockMaintenanceRequest}
-        onSuccess={mockOnSuccess}
-      />
-    );
+  describe('Different Request Statuses', () => {
+    it('should show appropriate title for pending status', () => {
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={{ ...mockMaintenanceRequest, status: 'pending' }}
+          onSuccess={mockOnSuccess}
+        />
+      );
 
-    const cancelButton = screen.getByText('Cancel');
-    fireEvent.click(cancelButton);
-
-    expect(mockOnClose).toHaveBeenCalled();
-  });
-
-  it('shows loading state during submission', () => {
-    (maintenanceApprovalHooks.useApproveRejectMaintenanceRequest as jest.Mock).mockReturnValue({
-      mutateAsync: mockMutateAsync,
-      isPending: true,
+      expect(screen.getByText('Review Maintenance Request')).toBeInTheDocument();
     });
 
-    renderWithQueryClient(
-      <ApproveRejectModal
-        isOpen={true}
-        onClose={mockOnClose}
-        maintenanceRequest={mockMaintenanceRequest}
-        onSuccess={mockOnSuccess}
-      />
-    );
+    it('should show appropriate title for under_review status', () => {
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={{ ...mockMaintenanceRequest, status: 'under_review' }}
+          onSuccess={mockOnSuccess}
+        />
+      );
 
-    // Select approve
-    const approveButton = screen.getByText('Approve Request');
-    fireEvent.click(approveButton);
+      expect(screen.getByText('Review & Decide')).toBeInTheDocument();
+    });
+  });
 
-    expect(screen.getByText('Processing...')).toBeInTheDocument();
+  describe('Accessibility', () => {
+    it('should have proper ARIA labels', () => {
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByLabelText(/rejection reason/i)).toBeInTheDocument();
+    });
+
+    it('should support keyboard navigation', async () => {
+      const user = userEvent.setup();
+      render(
+        <ApproveRejectModal
+          isOpen={true}
+          onClose={mockOnClose}
+          maintenanceRequest={mockMaintenanceRequest}
+          onSuccess={mockOnSuccess}
+        />
+      );
+
+      // Tab through elements
+      await user.tab();
+      expect(screen.getByRole('button', { name: /approve/i })).toHaveFocus();
+
+      await user.tab();
+      expect(screen.getByRole('button', { name: /reject/i })).toHaveFocus();
+    });
   });
 });

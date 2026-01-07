@@ -21,15 +21,19 @@ export type PaymentMethod = "cash" | "mtn_momo" | "vodafone_cash" | "bank_transf
 export type PaymentStatus = "completed" | "pending" | "failed";
 
 export type MaintenanceStatus = 
-  | "received" 
-  | "assigned" 
-  | "in_progress" 
-  | "pending_approval" 
-  | "approved" 
-  | "rejected"
-  | "resolved" 
-  | "closed"
-  | "cancelled";
+  | "pending"                     // Initial state when tenant creates request
+  | "under_review"                // Landlord/admin is reviewing
+  | "approved"                    // Approved and ready for assignment
+  | "rejected"                    // Rejected by landlord/admin
+  | "assigned"                    // Assigned to caretaker/artisan (waiting acceptance)
+  | "in_progress"                 // Work has started
+  | "completed_pending_review"    // Work completed, awaiting landlord review
+  | "awaiting_tenant_confirmation"// Landlord approved, tenant confirmation pending
+  | "completed"                   // Work finished, waiting quality review (legacy)
+  | "rework_required"             // Completion rejected, needs rework
+  | "closed"                      // Fully resolved
+  | "escalated"                   // Escalated after multiple reworks
+  | "cancelled";                  // Cancelled by tenant
 
 export type MaintenancePriority = "low" | "normal" | "urgent" | "emergency";
 export type MaintenanceUrgencyLevel = "low" | "normal" | "urgent" | "emergency";
@@ -386,8 +390,66 @@ export interface Payment {
     id: string;
     name: string;
   };
+  evidence?: PaymentEvidence;
+  attachments?: PaymentEvidenceAttachment[];
   created_at: string;
   updated_at?: string;
+}
+
+export type PaymentEvidenceStatus = "pending" | "approved" | "rejected";
+
+export interface PaymentEvidenceAttachment {
+  id?: string;
+  file_path?: string;
+  file_url?: string;
+  file_name?: string;
+  file_type?: "image" | "pdf" | "document";
+  file_size?: number;
+}
+
+export interface PaymentEvidence {
+  id: string;
+  invoice: {
+    id: string;
+    invoice_number: string;
+    outstanding_balance?: number;
+    total_amount?: number;
+    property?: {
+      id: string;
+      name: string;
+    };
+    unit?: {
+      id: string;
+      unit_number: string;
+    };
+  };
+  tenant: {
+    id: string;
+    name: string;
+    phone?: string;
+    email?: string;
+  };
+  property?: {
+    id: string;
+    name: string;
+  };
+  unit?: {
+    id: string;
+    unit_number: string;
+  };
+  amount: number;
+  payment_method: PaymentMethod;
+  payment_date: string;
+  reference_number?: string;
+  notes?: string;
+  status: PaymentEvidenceStatus;
+  attachments?: PaymentEvidenceAttachment[];
+  submitted_at: string;
+  reviewed_at?: string;
+  reviewed_by?: {
+    id: string;
+    name: string;
+  };
 }
 
 export interface RecordPaymentRequest {
@@ -460,6 +522,23 @@ export interface MaintenanceMedia {
   };
 }
 
+export interface MaintenanceStatusLog {
+  id: string;
+  maintenance_request_id: string;
+  from_status?: MaintenanceStatus | null;
+  to_status: MaintenanceStatus;
+  note?: string | null;
+  metadata?: Record<string, any> | null;
+  attachments?: MaintenanceMedia[];
+  created_at: string;
+  updated_at?: string;
+  created_by?: {
+    id: string;
+    name: string;
+    role: UserRole;
+  };
+}
+
 export interface MaintenanceRequestEvent {
   id: string;
   event_type: string;
@@ -511,7 +590,15 @@ export interface MaintenanceRequest {
     id: string;
     name: string;
     phone: string;
+    type?: "caretaker" | "artisan" | "landlord";
   };
+  assigned_to_type?: "caretaker" | "artisan" | "landlord";
+  assigned_to_id?: string;
+  offline_artisan_name?: string | null;
+  offline_artisan_phone?: string | null;
+  offline_artisan_company?: string | null;
+  offline_artisan_notes?: string | null;
+  offline_artisan_assigned_at?: string | null;
   category: {
     id: string;
     name: string;
@@ -522,21 +609,65 @@ export interface MaintenanceRequest {
   };
   estimated_cost: number | null;
   actual_cost: number | null;
+  // Cost breakdown fields
+  labor_cost?: number | null;
+  material_cost?: number | null;
+  artisan_fee?: number | null;
+  additional_expenses?: number | null;
+  cost_breakdown?: Record<string, number> | null;
+  completion_summary?: string | null;
+  completion_details?: string | null;
+  completion_media?: MaintenanceMedia[];
+  completion_attachments?: MaintenanceMedia[];
+  completion_submitted_by?: {
+    id: string;
+    name: string;
+    role: UserRole;
+  } | null;
+  completion_submitted_at?: string | null;
   requires_approval: boolean;
   approved_at: string | null;
+  rejection_reason?: string | null;
   preferred_start_date: string | null;
   scheduled_date: string | null;
+  // Assignment fields
+  assigned_at: string | null;
+  accepted_at: string | null;
+  rejected_at: string | null;
+  assignment_rejection_reason?: string | null;
   started_at: string | null;
   completed_at: string | null;
   resolved_at: string | null;
+  closed_at: string | null;
   resolution_time_hours: number | null;
+  // Quality review fields
   tenant_rating: number | null;
   tenant_feedback: string | null;
+  completion_approved_by_tenant: boolean | null;
+  completion_approved_by_landlord: boolean | null;
+  completion_rejected_reason?: string | null;
+  tenant_confirmation_notes?: string | null;
+  tenant_confirmed_at?: string | null;
+  landlord_review_notes?: string | null;
+  landlord_reviewed_at?: string | null;
+  // Escalation fields
+  rework_count?: number;
+  escalated?: boolean;
+  escalated_at?: string | null;
+  escalation_reason?: string | null;
+  // SLA fields
+  sla_response_deadline?: string | null;
+  sla_assignment_deadline?: string | null;
+  sla_completion_deadline?: string | null;
+  sla_response_met?: boolean | null;
+  sla_assignment_met?: boolean | null;
+  sla_completion_met?: boolean | null;
   created_at: string;
   updated_at: string;
   updates: MaintenanceUpdate[];
   media: MaintenanceMedia[];
   events?: MaintenanceRequestEvent[];
+  status_logs?: MaintenanceStatusLog[];
 }
 
 export interface CreateMaintenanceRequest {
@@ -678,9 +809,41 @@ export interface PaymentQueryParams extends PaginationParams {
 }
 
 export interface MaintenanceQueryParams extends PaginationParams {
+  // Single filters (backward compatibility)
   status?: MaintenanceStatus;
   priority?: MaintenancePriority;
   category_id?: string;
+  search?: string;
+  escalated?: boolean;
+  
+  // Array-based filters (new backend support)
+  "status[]"?: MaintenanceStatus[];
+  "priority[]"?: MaintenancePriority[];
+  "property_id[]"?: string[];
+  "category_id[]"?: string[];
+  "assignee[]"?: string[];
+  
+  // Boolean filters
+  overdue?: boolean;
+  
+  // Date range filters
+  created_from?: string; // ISO 8601 date
+  created_to?: string; // ISO 8601 date
+  due_from?: string; // ISO 8601 date
+  due_to?: string; // ISO 8601 date
+  
+  // Cost range filters
+  estimated_cost_min?: number;
+  estimated_cost_max?: number;
+  actual_cost_min?: number;
+  actual_cost_max?: number;
+  
+  // SLA status filter
+  sla_status?: "on_time" | "approaching" | "overdue" | "met";
+  
+  // Sorting
+  sort_by?: "created_at" | "updated_at" | "priority" | "status" | "title" | "cost";
+  sort_direction?: "asc" | "desc";
 }
 
 export interface PaymentAnalyticsParams {
@@ -1084,6 +1247,7 @@ export interface LandlordInvoice extends Invoice {
 export interface CreateInvoiceRequest {
   tenant_id: string;
   unit_id: string;
+  property_id: string;
   invoice_date: string;
   due_date: string;
   period_start: string;
@@ -1176,6 +1340,82 @@ export interface PaymentTrends {
   }[];
 }
 
+// ============================================
+// RENT ROLL
+// ============================================
+
+export type RentRollEntryType = "tenant" | "caretaker";
+
+export interface RentRollLease {
+  id: string;
+  property: {
+    id: string;
+    name: string;
+    address?: string | null;
+  };
+  unit?: {
+    id: string;
+    unit_number: string;
+    unit_type?: string | null;
+  } | null;
+  rent_amount?: number | null;
+  lease_start?: string | null;
+  lease_end?: string | null;
+  status?: string | null;
+  is_primary?: boolean;
+}
+
+export interface RentRollAssignment {
+  property: {
+    id: string;
+    name: string;
+    address?: string | null;
+  };
+  units_managed?: number;
+  assigned_since?: string | null;
+}
+
+export interface RentRollEntry {
+  id: string;
+  type: RentRollEntryType;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  avatar_url?: string | null;
+  status?: string | null;
+  bio?: string | null;
+  notes?: string | null;
+  leases?: RentRollLease[];
+  assignments?: RentRollAssignment[];
+  statistics?: {
+    open_requests?: number;
+    total_units?: number;
+    monthly_rent?: number;
+    expiring_leases?: number;
+  };
+}
+
+export interface RentRollSummary {
+  total_records: number;
+  total_tenants: number;
+  total_caretakers: number;
+  active_leases: number;
+  occupancy_rate: number;
+  properties_without_caretakers: number;
+  expiring_leases_30_days: number;
+  monthly_rent: number;
+}
+
+export interface RentRollDetailTenant {
+  tenant: RentRollEntry;
+  history?: RentRollLease[];
+}
+
+export interface RentRollDetailCaretaker {
+  caretaker: RentRollEntry;
+  properties?: RentRollAssignment[];
+}
+
 /**
  * Create user request (for caretakers/tenants)
  */
@@ -1214,9 +1454,11 @@ export interface LandlordMaintenanceRequest extends CaretakerMaintenanceRequest 
  * Assign maintenance request
  */
 export interface AssignMaintenanceRequest {
-  caretaker_id: string;
+  assignee_id: string;
+  assignee_type: "caretaker" | "artisan" | "landlord";
   note?: string;
   scheduled_date?: string;
+  priority?: MaintenancePriority;
 }
 
 /**
@@ -1225,7 +1467,45 @@ export interface AssignMaintenanceRequest {
 export interface ApproveRejectMaintenanceRequest {
   action: "approve" | "reject";
   note?: string;
+  rejection_reason?: string;
   approved_cost?: number;
+}
+
+export interface UpdateMaintenanceStatusPayload {
+  status: MaintenanceStatus;
+  note?: string;
+}
+
+/**
+ * Accept/Reject assignment (by caretaker/artisan)
+ */
+export interface AcceptRejectAssignmentRequest {
+  action: "accept" | "reject";
+  rejection_reason?: string;
+  note?: string;
+}
+
+/**
+ * Complete maintenance request (by caretaker/artisan)
+ */
+export interface CompleteMaintenanceRequest {
+  completion_notes?: string;
+  actual_cost?: number;
+  labor_cost?: number;
+  material_cost?: number;
+  artisan_fee?: number;
+  additional_expenses?: number;
+  media?: File[];
+}
+
+/**
+ * Review completion (by tenant/landlord)
+ */
+export interface ReviewCompletionRequest {
+  approved: boolean;
+  rating?: number; // 1-5 stars
+  feedback?: string;
+  rejection_reason?: string;
 }
 
 /**

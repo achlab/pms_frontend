@@ -63,6 +63,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth()
   }, [])
 
+  // Auto-refresh token every 45 minutes (before 1-hour expiration)
+  useEffect(() => {
+    if (!authState.isAuthenticated || !authState.user) return
+
+    const refreshInterval = setInterval(async () => {
+      try {
+        console.log('🔄 Auto-refreshing token...')
+        const user = await AuthService.verifyToken()
+        if (user) {
+          setAuthState(prev => ({
+            ...prev,
+            user,
+          }))
+          
+          // Update cookies
+          if (typeof document !== "undefined") {
+            const token = AuthService.getToken()
+            if (token) {
+              document.cookie = `auth_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
+            }
+            document.cookie = `auth_user=${encodeURIComponent(JSON.stringify(user))}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`
+          }
+          console.log('✅ Token refreshed successfully')
+        }
+      } catch (error) {
+        console.error('❌ Token refresh failed:', error)
+        // If refresh fails, log user out
+        setAuthState({
+          user: null,
+          isLoading: false,
+          isAuthenticated: false,
+        })
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login?message=Session expired. Please log in again.'
+        }
+      }
+    }, 45 * 60 * 1000) // 45 minutes
+
+    return () => clearInterval(refreshInterval)
+  }, [authState.isAuthenticated, authState.user])
+
   const login = async (emailOrPhone: string, password: string) => {
     setAuthState((prev) => ({ ...prev, isLoading: true }))
     try {

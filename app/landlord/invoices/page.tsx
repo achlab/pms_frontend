@@ -166,7 +166,7 @@ export default function InvoicesPage() {
           {/* Invoice List */}
           <InvoiceList
             invoices={invoices}
-            onViewDetails={(id) => router.push(`/invoices/${id}`)}
+            onViewDetails={(id) => router.push(`/landlord/invoices/${id}`)}
             onRecordPayment={handleRecordPayment}
             onFilterChange={handleFilterChange}
           />

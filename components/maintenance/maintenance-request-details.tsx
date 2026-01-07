@@ -5,20 +5,26 @@
 
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/auth-context";
 import { useMarkMaintenanceResolution } from "@/lib/hooks/use-maintenance";
 import { formatDate } from "@/lib/utils";
+import { formatStatus } from "@/lib/api-utils";
 import {
   AlertCircle,
   Image as ImageIcon,
   CheckCircle2,
   RotateCcw,
+  CheckCircle,
+  ArrowRight,
 } from "lucide-react";
 import type { MaintenanceRequest } from "@/lib/api-types";
 import { toast } from "@/hooks/use-toast";
+import { ApproveRejectModal } from "./approve-reject-modal";
+import { ReviewCompletionModal } from "./review-completion-modal";
 
 interface MaintenanceRequestDetailsProps {
   request: MaintenanceRequest;
@@ -34,15 +40,36 @@ export function MaintenanceRequestDetails({
   const { user } = useAuth();
   const [note, setNote] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
+  const [showApproveRejectModal, setShowApproveRejectModal] = useState(false);
+  const [showReviewCompletionModal, setShowReviewCompletionModal] = useState(false);
   const markResolutionMutation = useMarkMaintenanceResolution();
+  
+  const isSuperAdmin = user?.role === "super_admin";
+  const isLandlord = user?.role === "landlord";
+  const isCaretaker = user?.role === "caretaker";
+  const isOwner =
+    request.landlord_id === user?.id ||
+    request.property?.landlord_id === user?.id ||
+    request.landlord?.id === user?.id;
+
+  const isAssignedCaretaker =
+    isCaretaker &&
+    (request.caretaker?.id === user?.id ||
+      request.assigned_to?.id === user?.id);
+
+  const normalizedStatus = request.status?.toLowerCase();
+  const canReview =
+    ["pending", "received", "under_review"].includes(normalizedStatus) &&
+    (isSuperAdmin || (isLandlord && isOwner) || isAssignedCaretaker);
   const statusColors: Record<string, string> = {
-    received: "bg-blue-500",
-    assigned: "bg-purple-500",
+    pending: "bg-gray-500",
+    received: "bg-gray-500",
+    under_review: "bg-blue-500",
     in_progress: "bg-yellow-500",
-    pending_approval: "bg-orange-500",
-    approved: "bg-green-500",
-    resolved: "bg-green-600",
-    closed: "bg-gray-500",
+    completed_pending_review: "bg-emerald-500",
+    awaiting_tenant_confirmation: "bg-indigo-500",
+    closed: "bg-gray-700",
+    rejected: "bg-red-500",
   };
 
   const priorityColors: Record<string, string> = {
@@ -138,6 +165,14 @@ export function MaintenanceRequestDetails({
       )[0]
     : null;
 
+  const statusLogs = useMemo(() => {
+    const logs = (request.status_logs || (request as any).statusLogs || []) as any[];
+    return [...logs].sort(
+      (a, b) =>
+        new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime()
+    );
+  }, [request.status_logs, (request as any).statusLogs]);
+
   return (
     <div className="space-y-4">
       {/* Rejection Alert - Show prominently at the top */}
@@ -190,6 +225,125 @@ export function MaintenanceRequestDetails({
                 </p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Landlord Review/Approval Section */}
+      {canReview && (
+        <Card className="border-2 border-blue-200 bg-blue-50/50">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-blue-600" />
+              Review & Decision
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {(normalizedStatus === "pending" || normalizedStatus === "received") &&
+                "This request is pending your review. Approve it to move the work forward, or reject with a reason."}
+              {normalizedStatus === "under_review" &&
+                "This request is under review. Please make your decision."}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={() => setShowApproveRejectModal(true)}
+              className="w-full bg-blue-600 hover:bg-blue-700"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              {['pending', 'received', 'under_review'].includes(normalizedStatus) ? 'Review Request' : 'Change Decision'}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Review Completion Section (Tenant & Landlord) */}
+      {request.status === 'completed' && (
+        <Card className="border-2 border-green-200 bg-green-50/50">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              Review Completed Work
+            </CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {user?.role === 'tenant' 
+                ? 'The work has been completed. Please review and rate the quality of the work.'
+                : 'The work has been completed. Please review and approve or reject the completion.'}
+            </p>
+          </CardHeader>
+          <CardContent>
+            {/* Show review status if already reviewed */}
+            {((user?.role === 'tenant' && request.completion_approved_by_tenant !== null) ||
+              ((user?.role === 'landlord' || user?.role === 'super_admin') && request.completion_approved_by_landlord !== null)) && (
+              <div className="mb-4 p-3 bg-white rounded-lg border">
+                <p className="text-sm font-medium mb-1">
+                  {user?.role === 'tenant' 
+                    ? request.completion_approved_by_tenant 
+                      ? '✅ You approved this completion'
+                      : '❌ You rejected this completion'
+                    : request.completion_approved_by_landlord
+                      ? '✅ You approved this completion'
+                      : '❌ You rejected this completion'}
+                </p>
+                {request.tenant_rating && user?.role === 'tenant' && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Your rating: {request.tenant_rating} / 5 stars
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Show button if not reviewed yet */}
+            {((user?.role === 'tenant' && request.completion_approved_by_tenant === null) ||
+              ((user?.role === 'landlord' || user?.role === 'super_admin') && request.completion_approved_by_landlord === null)) && (
+              <Button
+                onClick={() => setShowReviewCompletionModal(true)}
+                className="w-full bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                {user?.role === 'tenant' ? 'Review & Rate Completion' : 'Review Completion'}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Status timeline */}
+      {statusLogs.length > 0 && (
+        <Card className="border border-muted">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-muted-foreground" />
+              Status Timeline
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {statusLogs.map((log) => (
+              <div key={log.id} className="flex gap-3">
+                <div className="w-32 text-xs text-muted-foreground">
+                  {formatDate(log.created_at)}
+                </div>
+                <div className="flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className="capitalize">
+                      {formatStatus(log.to_status)}
+                    </Badge>
+                    {log.from_status && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        {formatStatus(log.from_status)} <ArrowRight className="h-3 w-3" /> {formatStatus(log.to_status)}
+                      </span>
+                    )}
+                  </div>
+                  {log.note && (
+                    <p className="text-sm text-muted-foreground">{log.note}</p>
+                  )}
+                  {log.created_by && (
+                    <p className="text-xs text-muted-foreground">
+                      By {log.created_by.name} ({formatStatus(log.created_by.role)})
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
@@ -324,6 +478,31 @@ export function MaintenanceRequestDetails({
         </Card>
       )}
 
+      {/* Approve/Reject Modal */}
+      {showApproveRejectModal && (
+        <ApproveRejectModal
+          isOpen={showApproveRejectModal}
+          onClose={() => setShowApproveRejectModal(false)}
+          maintenanceRequest={request}
+          onSuccess={() => {
+            onUpdate?.();
+            setShowApproveRejectModal(false);
+          }}
+        />
+      )}
+
+      {/* Review Completion Modal */}
+      {showReviewCompletionModal && (
+        <ReviewCompletionModal
+          isOpen={showReviewCompletionModal}
+          onClose={() => setShowReviewCompletionModal(false)}
+          maintenanceRequest={request}
+          onSuccess={() => {
+            onUpdate?.();
+            setShowReviewCompletionModal(false);
+          }}
+        />
+      )}
     </div>
   );
 }

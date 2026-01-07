@@ -22,6 +22,7 @@ interface InvoiceListProps {
     invoice_type?: InvoiceType;
     search?: string;
   }) => void;
+  actionLabel?: string;
 }
 
 export function InvoiceList({
@@ -29,6 +30,7 @@ export function InvoiceList({
   onViewDetails,
   onRecordPayment,
   onFilterChange,
+  actionLabel,
 }: InvoiceListProps) {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -146,6 +148,7 @@ export function InvoiceList({
               invoice={invoice}
               onViewDetails={onViewDetails}
               onRecordPayment={onRecordPayment}
+              actionLabel={actionLabel}
             />
           ))}
         </div>

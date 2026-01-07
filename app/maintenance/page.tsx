@@ -2,9 +2,10 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { MainLayout } from "@/components/main-layout"
 import { useAuth } from "@/contexts/auth-context"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { CardContent } from "@/components/ui/card"
 import { AnimatedCard } from "@/components/animated-card"
@@ -27,8 +28,13 @@ import {
   MapPin,
   Phone,
   Mail,
-  Loader2
+  Loader2,
+  UserCheck,
+  XCircle
 } from "lucide-react"
+import { AcceptAssignmentModal } from "@/components/maintenance/accept-assignment-modal"
+import { StartWorkModal } from "@/components/maintenance/start-work-modal"
+import { CompleteWorkModal } from "@/components/maintenance/complete-work-modal"
 import { formatDate } from "@/lib/localization"
 import { toast } from "@/hooks/use-toast"
 import {
@@ -37,10 +43,41 @@ import {
   useUpdateMaintenanceStatus
 } from "@/lib/hooks/use-caretaker-maintenance"
 
-export default function CaretakerMaintenancePage() {
+export default function MaintenancePage() {
   const { user } = useAuth()
+  const router = useRouter()
+
+  // Role-specific redirects
+  useEffect(() => {
+    if (user?.role === "landlord") {
+      router.replace("/landlord/maintenance")
+    }
+    if (user?.role === "super_admin") {
+      router.replace("/admin/maintenance")
+    }
+  }, [user, router])
+  
+  // Prevent rendering this page for landlord/super admin while redirecting
+  if (user?.role === "landlord" || user?.role === "super_admin") {
+    return null
+  }
+
+  // If tenant, redirect to tenant maintenance page component
+  if (user?.role === "tenant") {
+    // Dynamically import tenant page to avoid circular dependencies
+    const TenantMaintenancePage = require("./page-tenant").default;
+    return <TenantMaintenancePage />;
+  }
+  
+  // Otherwise, show caretaker maintenance page
   const [selectedRequest, setSelectedRequest] = useState<any>(null)
   const [showUpdateDialog, setShowUpdateDialog] = useState(false)
+  const [showAcceptModal, setShowAcceptModal] = useState(false)
+  const [showStartWorkModal, setShowStartWorkModal] = useState(false)
+  const [showCompleteWorkModal, setShowCompleteWorkModal] = useState(false)
+  const [acceptRequest, setAcceptRequest] = useState<any>(null)
+  const [startWorkRequest, setStartWorkRequest] = useState<any>(null)
+  const [completeWorkRequest, setCompleteWorkRequest] = useState<any>(null)
   const [updateData, setUpdateData] = useState({
     status: "",
     message: ""
@@ -91,6 +128,38 @@ export default function CaretakerMaintenancePage() {
     setShowUpdateDialog(true)
   }
 
+  const handleAcceptAssignment = (request: any) => {
+    setAcceptRequest(request)
+    setShowAcceptModal(true)
+  }
+
+  const handleAcceptSuccess = () => {
+    // Refetch requests after accepting
+    // The hook should handle this automatically
+    setShowAcceptModal(false)
+    setAcceptRequest(null)
+  }
+
+  const handleStartWork = (request: any) => {
+    setStartWorkRequest(request)
+    setShowStartWorkModal(true)
+  }
+
+  const handleStartWorkSuccess = () => {
+    setShowStartWorkModal(false)
+    setStartWorkRequest(null)
+  }
+
+  const handleCompleteWork = (request: any) => {
+    setCompleteWorkRequest(request)
+    setShowCompleteWorkModal(true)
+  }
+
+  const handleCompleteWorkSuccess = () => {
+    setShowCompleteWorkModal(false)
+    setCompleteWorkRequest(null)
+  }
+
   const handleSubmitUpdate = () => {
     if (!selectedRequest || !updateData.status) return
 
@@ -131,8 +200,23 @@ export default function CaretakerMaintenancePage() {
     }
   }
 
-  const activeRequests = maintenanceRequests.filter((r) => r.status !== "resolved" && r.status !== "closed")
-  const completedRequests = maintenanceRequests.filter((r) => r.status === "resolved" || r.status === "closed")
+  // Filter requests based on new workflow statuses
+  const activeRequests = maintenanceRequests.filter((r) => 
+    !["resolved", "closed", "cancelled", "rejected"].includes(r.status)
+  );
+  const completedRequests = maintenanceRequests.filter((r) => 
+    ["resolved", "closed", "completed"].includes(r.status)
+  );
+  // Get assigned requests (waiting for acceptance) - assigned to current user
+  const assignedRequests = maintenanceRequests.filter((r) => 
+    r.status === "assigned" && 
+    (r.assigned_to_id === user?.id || r.assigned_to?.id === user?.id)
+  );
+  // Get rework required requests (assigned to current user)
+  const reworkRequests = maintenanceRequests.filter((r) => 
+    r.status === "rework_required" && 
+    (r.assigned_to_id === user?.id || r.assigned_to?.id === user?.id)
+  );
 
   return (
     <MainLayout>
@@ -225,17 +309,96 @@ export default function CaretakerMaintenancePage() {
         </div>
 
         {/* Requests Tabs */}
-        <Tabs defaultValue="active" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs defaultValue="assigned" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="assigned" className="flex items-center gap-2">
+              <UserCheck className="h-4 w-4" />
+              New Assignments ({assignedRequests.length})
+            </TabsTrigger>
+            <TabsTrigger value="rework" className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4" />
+              Rework Required ({reworkRequests.length})
+            </TabsTrigger>
             <TabsTrigger value="active" className="flex items-center gap-2">
               <Clock className="h-4 w-4" />
-              Active Requests ({activeRequests.length})
+              In Progress ({activeRequests.filter(r => r.status === "in_progress").length})
             </TabsTrigger>
             <TabsTrigger value="completed" className="flex items-center gap-2">
               <CheckCircle className="h-4 w-4" />
               Completed ({completedRequests.length})
             </TabsTrigger>
           </TabsList>
+
+          {/* New Assignments Tab */}
+          <TabsContent value="assigned" className="space-y-4">
+            {requestsLoading ? (
+              <div className="text-center py-12">
+                <Loader2 className="h-12 w-12 animate-spin text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400">Loading maintenance requests...</p>
+              </div>
+            ) : requestsError ? (
+              <div className="text-center py-12">
+                <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
+                <p className="text-red-500 dark:text-red-400">
+                  Failed to load maintenance requests. Please try again.
+                </p>
+              </div>
+            ) : assignedRequests.length === 0 ? (
+              <div className="text-center py-12">
+                <UserCheck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400">No new assignments waiting for your response.</p>
+              </div>
+            ) : (
+              assignedRequests.map((request) => (
+                <RequestCard
+                  key={request.id}
+                  request={request}
+                  getStatusColor={getStatusColor}
+                  getPriorityColor={getPriorityColor}
+                  onUpdateStatus={handleUpdateStatus}
+                  onAcceptAssignment={handleAcceptAssignment}
+                  onStartWork={handleStartWork}
+                  onCompleteWork={handleCompleteWork}
+                  isCaretaker={true}
+                />
+              ))
+            )}
+          </TabsContent>
+
+          {/* Rework Required Tab */}
+          <TabsContent value="rework" className="space-y-4">
+            {requestsLoading ? (
+              <div className="text-center py-12">
+                <Loader2 className="h-12 w-12 animate-spin text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400">Loading maintenance requests...</p>
+              </div>
+            ) : requestsError ? (
+              <div className="text-center py-12">
+                <AlertCircle className="h-12 w-12 text-red-400 mx-auto mb-4" />
+                <p className="text-red-500 dark:text-red-400">
+                  Failed to load maintenance requests. Please try again.
+                </p>
+              </div>
+            ) : reworkRequests.length === 0 ? (
+              <div className="text-center py-12">
+                <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-500 dark:text-gray-400">No rework required requests.</p>
+              </div>
+            ) : (
+              reworkRequests.map((request) => (
+                <RequestCard
+                  key={request.id}
+                  request={request}
+                  getStatusColor={getStatusColor}
+                  getPriorityColor={getPriorityColor}
+                  onUpdateStatus={handleUpdateStatus}
+                  onStartWork={handleStartWork}
+                  onCompleteWork={handleCompleteWork}
+                  isCaretaker={true}
+                />
+              ))
+            )}
+          </TabsContent>
 
           <TabsContent value="active" className="space-y-4">
             {requestsLoading ? (
@@ -250,19 +413,21 @@ export default function CaretakerMaintenancePage() {
                   Failed to load maintenance requests. Please try again.
                 </p>
               </div>
-            ) : activeRequests.length === 0 ? (
+            ) : activeRequests.filter(r => r.status === "in_progress").length === 0 ? (
               <div className="text-center py-12">
                 <Wrench className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500 dark:text-gray-400">No active maintenance requests assigned to you.</p>
+                <p className="text-gray-500 dark:text-gray-400">No active maintenance requests in progress.</p>
               </div>
             ) : (
-              activeRequests.map((request) => (
+              activeRequests.filter(r => r.status === "in_progress").map((request) => (
                 <RequestCard
                   key={request.id}
                   request={request}
                   getStatusColor={getStatusColor}
                   getPriorityColor={getPriorityColor}
                   onUpdateStatus={handleUpdateStatus}
+                  onStartWork={handleStartWork}
+                  onCompleteWork={handleCompleteWork}
                   isCaretaker={true}
                 />
               ))
@@ -295,12 +460,53 @@ export default function CaretakerMaintenancePage() {
                   getStatusColor={getStatusColor}
                   getPriorityColor={getPriorityColor}
                   onUpdateStatus={handleUpdateStatus}
+                  onStartWork={handleStartWork}
+                  onCompleteWork={handleCompleteWork}
                   isCaretaker={true}
                 />
               ))
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Accept Assignment Modal */}
+        {showAcceptModal && acceptRequest && (
+          <AcceptAssignmentModal
+            isOpen={showAcceptModal}
+            onClose={() => {
+              setShowAcceptModal(false)
+              setAcceptRequest(null)
+            }}
+            maintenanceRequest={acceptRequest}
+            onSuccess={handleAcceptSuccess}
+          />
+        )}
+
+        {/* Start Work Modal */}
+        {showStartWorkModal && startWorkRequest && (
+          <StartWorkModal
+            isOpen={showStartWorkModal}
+            onClose={() => {
+              setShowStartWorkModal(false)
+              setStartWorkRequest(null)
+            }}
+            maintenanceRequest={startWorkRequest}
+            onSuccess={handleStartWorkSuccess}
+          />
+        )}
+
+        {/* Complete Work Modal */}
+        {showCompleteWorkModal && completeWorkRequest && (
+          <CompleteWorkModal
+            isOpen={showCompleteWorkModal}
+            onClose={() => {
+              setShowCompleteWorkModal(false)
+              setCompleteWorkRequest(null)
+            }}
+            maintenanceRequest={completeWorkRequest}
+            onSuccess={handleCompleteWorkSuccess}
+          />
+        )}
 
         {/* Update Status Dialog */}
         <Dialog open={showUpdateDialog} onOpenChange={setShowUpdateDialog}>
@@ -362,15 +568,37 @@ function RequestCard({
   getStatusColor,
   getPriorityColor,
   onUpdateStatus,
+  onAcceptAssignment,
+  onStartWork,
+  onCompleteWork,
   isCaretaker = false
 }: {
   request: any
   getStatusColor: (status: string) => string
   getPriorityColor: (priority: string) => string
   onUpdateStatus: (request: any) => void
+  onAcceptAssignment?: (request: any) => void
+  onStartWork?: (request: any) => void
+  onCompleteWork?: (request: any) => void
   isCaretaker?: boolean
 }) {
+  const { user } = useAuth()
   const [showUpdates, setShowUpdates] = useState(false)
+  
+  // Check if this request is assigned to the current user and needs acceptance
+  const isAssignedToMe = 
+    request.assigned_to_id === user?.id ||
+    request.assigned_to?.id === user?.id
+  const needsAcceptance = request.status === "assigned" && isAssignedToMe && !request.accepted_at
+  
+  // Check if assignment has been accepted and can start work
+  const canStartWork = request.status === "assigned" && isAssignedToMe && request.accepted_at && !request.started_at
+  
+  // Check if work is in progress and can be completed
+  const canCompleteWork = request.status === "in_progress" && isAssignedToMe
+  
+  // Check if rework is required and can start rework
+  const canStartRework = request.status === "rework_required" && isAssignedToMe
 
   return (
     <AnimatedCard className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
@@ -454,8 +682,94 @@ function RequestCard({
             </div>
           </div>
 
+          {/* Accept/Reject Assignment Buttons */}
+          {needsAcceptance && onAcceptAssignment && (
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => onAcceptAssignment(request)}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Accept Assignment
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onAcceptAssignment(request)}
+                className="flex-1 border-red-300 text-red-700 hover:bg-red-50"
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                Reject Assignment
+              </Button>
+            </div>
+          )}
+
+          {/* Rejection Reason (if rework required) */}
+          {request.status === "rework_required" && request.completion_rejected_reason && (
+            <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-red-900 dark:text-red-100 mb-1">
+                    Rejection Reason
+                  </p>
+                  <p className="text-sm text-red-800 dark:text-red-200">
+                    {request.completion_rejected_reason}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Start Rework Button */}
+          {canStartRework && onStartWork && (
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => onStartWork(request)}
+                className="flex-1 bg-orange-600 hover:bg-orange-700"
+              >
+                <Wrench className="h-4 w-4 mr-2" />
+                Start Rework
+              </Button>
+            </div>
+          )}
+
+          {/* Start Work Button */}
+          {canStartWork && onStartWork && (
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => onStartWork(request)}
+                className="flex-1 bg-blue-600 hover:bg-blue-700"
+              >
+                <Wrench className="h-4 w-4 mr-2" />
+                Start Work
+              </Button>
+            </div>
+          )}
+
+          {/* Mark as Completed Button */}
+          {canCompleteWork && onCompleteWork && (
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => onCompleteWork(request)}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Mark as Completed
+              </Button>
+            </div>
+          )}
+
           {/* Action Buttons for Caretakers */}
-          {isCaretaker && request.status !== "Completed" && (
+          {isCaretaker && request.status !== "completed" && request.status !== "closed" && !needsAcceptance && !canStartWork && !canCompleteWork && (
             <div className="flex gap-2">
               <Button
                 variant="outline"
@@ -472,7 +786,7 @@ function RequestCard({
                 className="flex-1"
               >
                 <MessageSquare className="h-4 w-4 mr-2" />
-                {showUpdates ? "Hide" : "Show"} Updates ({request.updates.length})
+                {showUpdates ? "Hide" : "Show"} Updates ({request.updates?.length || 0})
               </Button>
             </div>
           )}
@@ -483,13 +797,13 @@ function RequestCard({
               {!isCaretaker && (
                 <Button variant="outline" size="sm" onClick={() => setShowUpdates(!showUpdates)} className="w-full">
                   <MessageSquare className="h-4 w-4 mr-2" />
-                  {showUpdates ? "Hide" : "Show"} Updates ({request.updates.length})
+                  {showUpdates ? "Hide" : "Show"} Updates ({request.updates?.length || 0})
                 </Button>
               )}
 
               {showUpdates && (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {request.updates.map((update: any) => (
+                  {(request.updates || []).map((update: any) => (
                     <div key={update.id} className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                       <div className="flex items-start justify-between">
                         <p className="text-sm text-gray-900 dark:text-white">{update.message}</p>

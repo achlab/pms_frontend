@@ -16,9 +16,10 @@ interface InvoiceCardProps {
   invoice: Invoice;
   onViewDetails?: (invoiceId: string) => void;
   onRecordPayment?: (invoiceId: string) => void;
+  actionLabel?: string;
 }
 
-export function InvoiceCard({ invoice, onViewDetails, onRecordPayment }: InvoiceCardProps) {
+export function InvoiceCard({ invoice, onViewDetails, onRecordPayment, actionLabel }: InvoiceCardProps) {
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       paid: "bg-green-100 text-green-800",
@@ -133,11 +134,11 @@ export function InvoiceCard({ invoice, onViewDetails, onRecordPayment }: Invoice
         )}
 
         {/* Actions */}
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           {onViewDetails && (
             <Button
               variant="outline"
-              className="flex-1"
+              className="w-full whitespace-normal sm:flex-1"
               onClick={() => onViewDetails(invoice.id)}
             >
               View Details
@@ -146,11 +147,11 @@ export function InvoiceCard({ invoice, onViewDetails, onRecordPayment }: Invoice
 
           {!isPaid && onRecordPayment && (
             <Button
-              className="flex-1"
+              className="w-full whitespace-normal sm:flex-1"
               onClick={() => onRecordPayment(invoice.id)}
             >
               <CreditCard className="h-4 w-4 mr-2" />
-              Record Payment
+              {actionLabel || "Record Payment"}
             </Button>
           )}
         </div>
